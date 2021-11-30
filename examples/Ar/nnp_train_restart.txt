@@ -5,12 +5,17 @@
 		#mode			test # test nn 
 	# training data
 		data_train		data_deform_iso_train.txt
+		#data_train		data_deform_iso_train_bin.txt
 	# validation data
 		data_val		data_md_nve.txt
+		#data_val		data_md_nve_bin.txt
 	# test data
 		#data_test		data_md_nve.txt
 	# format
+		#format			VASP_XML # file format - vasp xml
 		format			QE # file format - qe standard output
+		#format			AME # file format - ame format
+		#format			BINARY # file format - binary format
 	# units
 		units			metal # same as LAMMPS units
 	# random
@@ -24,8 +29,8 @@
 
 # READING
 	file_ann		ann_Ar			# potential file
-	file_restart		nnp_train.restart	# restart file
-	restart			false			# restart
+	file_restart		nn_pot_train.restart	# restart file
+	restart			true			# restart
 	norm			true			# normalize energies w.r.t. number of atoms
 
 # WRITING
@@ -38,32 +43,46 @@
 	write_symm		false		# write symmetry functionns to binary files
 	
 # OPTIMIZATION
-	algo			adam		# ADAM optimizer
+	#algo			sgd		# steepest-descent
+	#algo			sdm		# steepest-descent - momentum
+	#algo			nag		# Nesterov accelerated gradient
+	#algo			adagrad		# Adagrad
+	#algo			adadelta	# AdaDelta
+	algo			adam		# Adam
+	#algo			amsgrad		# AMSGrad
+	#algo			nadam		# Nesterov-Adam
+	#algo			rmsprop		# RMSprop
+	#algo			rprop		# irprop+ (Igel, C.; Hüsken, M. Improving the Rprop Learning Algorithm; 2000)
+	#algo			bfgs		# BFGS conjugate gradient
+	#decay			const		# decay schedule - constant
 	decay			exp		# decay schedule - exponential
+	#decay			cos		# decay schedule - exponential
+	#decay			sqrt		# decay schedule - square root
+	#decay			inv		# decay schedule - inverse
+	#decay			pow		# decay schedule - power
 	opt_val			ftol_abs	# type of break condition
 	tol			1e-14		# break condition - make small
 	max_iter		1000000		# max number of iterations
 	n_print			10000		# print - status - every n optimization steps
 	n_write			100000		# write - restart - every n optimization steps
-	gamma			1e-3		# step size for gradient descent
+	#gamma			1e-3		# step size for gradient descent
 	eta			0.9		# memory term (sdm,nag,adagrad)
-	alpha			1e-5		# decay term
+	alpha			1e-6		# decay term
 	lambda			0		# regularization parameter
-	loss			mse		# loss function
+	loss			huber		# loss function
 	norm			true		# normalization
-	huberw			10.0		# huber width
-	mix			0.0		# polyak averaging
-	error_scale		1000.0		# error scaling
+	huberw			1.0		# huber width
+	mix			0.1
 
 # NN POTENTIAL
 	r_cut			10		# max cutoff distance
 	init			he		# initialization - He
 	sigma			1.0		# initialization - deviation
 	dist			normal		# initialization - distribution
-	transfer		softplus	# transfer function - tanh
+	transfer		tanh		# transfer function - tanh
 	n_batch			4		# number of systems in batch (superceded by p_batch)
 	pre_cond		0		# whether to pre-condition the network inputs
-	calc_force		true		# whether to compute the forces
+	calc_force		false		# whether to compute the forces
 
 # algorithm performance (gamma=0.001,eta=0.9,t=10000)
 # more * implies better performance
