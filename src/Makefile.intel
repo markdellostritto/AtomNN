@@ -4,5 +4,6 @@
 
 CXX_THREAD=mpiicpc
 CXX_SERIAL=icpc
-CXX_FLAGS=-std=c++11 -w -O3 -march=native -fp-model fast
+CXX_FLAGS=-std=c++11 -w -O3 -march=native 
+#CXX_FLAGS=-std=c++11 -w -O3 -march=native -fp-model fast
 
