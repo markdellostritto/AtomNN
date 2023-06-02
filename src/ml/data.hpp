@@ -12,23 +12,23 @@
 class MLData{
 private:
 	int size_;
-	int dIn_,dOut_;
-	std::vector<VecXd> in_;
+	int dInp_,dOut_;
+	std::vector<VecXd> inp_;
 	std::vector<VecXd> out_;
 public:
 	//==== constructors/destructors ====
-	MLData():size_(0),dIn_(0),dOut_(0){}
-	MLData(int size, int dIn, int dOut){resize(size,dIn,dOut);}
+	MLData():size_(0),dInp_(0),dOut_(0){}
+	MLData(int size, int dInp, int dOut){resize(size,dInp,dOut);}
 	~MLData(){}
 	
 	//==== access ====
 	const int& size()const{return size_;}
-	const int& dIn()const{return dIn_;}
+	const int& dInp()const{return dInp_;}
 	const int& dOut()const{return dOut_;}
-	VecXd& in(int n){return in_[n];}
-	const VecXd& in(int n)const{return in_[n];}
-	std::vector<VecXd>& in(){return in_;}
-	const std::vector<VecXd>& in()const{return in_;}
+	VecXd& inp(int n){return inp_[n];}
+	const VecXd& inp(int n)const{return inp_[n];}
+	std::vector<VecXd>& inp(){return inp_;}
+	const std::vector<VecXd>& inp()const{return inp_;}
 	VecXd& out(int n){return out_[n];}
 	const VecXd& out(int n)const{return out_[n];}
 	std::vector<VecXd>& out(){return out_;}
@@ -36,9 +36,9 @@ public:
 	
 	//==== member functions ====
 	void clear();
-	void resize(int dIn, int dOut);
-	void resize(int size, int dIn, int dOut);
-	void push(const Eigen::VectorXd& in, const Eigen::VectorXd& out);
+	void resize(int dInp, int dOut);
+	void resize(int size, int dInp, int dOut);
+	void push(const Eigen::VectorXd& inp, const Eigen::VectorXd& out);
 };
 
 #endif

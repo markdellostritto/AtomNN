@@ -9,14 +9,18 @@
 #include <random>
 // c libraries
 #include <memory>
-// ann - typedefs
+// typedefs
 #include "src/util/typedef.hpp"
-// ann - ml
+// ml
 #include "src/ml/nn.hpp"
 #include "src/ml/batch.hpp"
 #include "src/ml/data.hpp"
-// ann - opt
-#include "src/opt/optimize.hpp"
+// opt
+#include "src/opt/loss.hpp"
+#include "src/opt/stop.hpp"
+#include "src/opt/decay.hpp"
+#include "src/opt/algo.hpp"
+#include "src/opt/objective.hpp"
 // ann - random
 #include "src/math/random.hpp"
 
@@ -44,9 +48,9 @@ private:
 	//optimization
 		int seed_;
 		std::mt19937 rngen_;
-		Opt::Loss loss_; //loss function
-		Opt::Data data_; //optimization data
-		std::shared_ptr<Opt::Model> model_; //optimization model
+		opt::Objective obj_; //optimization objective
+		std::shared_ptr<opt::algo::Base> algo_; //optimization algorithm
+		std::shared_ptr<opt::decay::Base> decay_;//step decay
 		Batch batch_; //batch
 		double err_train_; //error - training
 		double err_val_; //error - validation
@@ -72,12 +76,12 @@ public:
 	//optimization
 		int& seed(){return seed_;}
 		const int& seed()const{return seed_;}
-		Opt::Loss& loss(){return loss_;}
-		const Opt::Loss& loss()const{return loss_;}
-		Opt::Data& data(){return data_;}
-		const Opt::Data& data()const{return data_;}
-		std::shared_ptr<Opt::Model>& model(){return model_;}
-		const std::shared_ptr<Opt::Model>& model()const{return model_;}
+		opt::Objective& obj(){return obj_;}
+		const opt::Objective& obj()const{return obj_;}
+		std::shared_ptr<opt::algo::Base>& algo(){return algo_;}
+		const std::shared_ptr<opt::algo::Base>& algo()const{return algo_;}
+		std::shared_ptr<opt::decay::Base>& decay(){return decay_;}
+		const std::shared_ptr<opt::decay::Base>& decay()const{return decay_;}
 		Batch& batch(){return batch_;}
 		const Batch& batch()const{return batch_;}
 		double err_train()const{return err_train_;}

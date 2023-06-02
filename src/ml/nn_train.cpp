@@ -29,9 +29,9 @@ std::ostream& operator<<(std::ostream& out, const NNOpt& nnopt){
 	out<<"post-cond = "<<nnopt.postCond_<<"\n";
 	out<<"restart   = "<<nnopt.restart_<<"\n";
 	out<<"batch     = "<<nnopt.batch_<<"\n";
-	out<<"loss      = "<<nnopt.loss_<<"\n";
-	out<<nnopt.data_<<"\n";
-	if(nnopt.model_.use_count()>0) Opt::Model::print(out,nnopt.model_.get());
+	out<<"algo      = "<<nnopt.algo_<<"\n";
+	out<<"decay     = "<<nnopt.decay_<<"\n";
+	out<<nnopt.obj_<<"\n";
 	out<<print::title("NN - OPT",str)<<"\n";
 	out<<print::buf(str);
 	delete[] str;
@@ -44,11 +44,12 @@ std::ostream& operator<<(std::ostream& out, const NNOpt& nnopt){
 * set defaults
 */
 void NNOpt::defaults(){
+	std::cout<<"NNOpt::defaults():\n";
 	if(NN_TRAIN_PRINT_FUNC>0) std::cout<<"NNOpt::defaults():\n";
 	//optimization
 		seed_=-1;
 		batch_.clear();
-		data_.clear();
+		obj_.clear();
 		err_train_=0;
 		err_val_=0;
 	//conditioning
@@ -68,7 +69,7 @@ void NNOpt::clear(){
 		nn_.clear();
 	//optimization
 		batch_.clear();
-		data_.clear();
+		obj_.clear();
 		err_train_=0;
 		err_val_=0;
 	//conditioning
@@ -98,11 +99,11 @@ void NNOpt::train(int nbatchl, const MLData& data_train, const MLData& data_val)
 	if(data_train.size()<=0) throw std::invalid_argument("NNOpt::train(std::shared_ptr<NN::ANN>&,int): no training data provided.");
 	if(data_val.size()<=0) throw std::invalid_argument("NNOpt::train(std::shared_ptr<NN::ANN>&,int): no training data provided.");
 	for(int n=0; n<data_train.size(); ++n){
-		if(data_train.in(n).size()!=nn_.nIn()) throw std::invalid_argument("NNOpt::train(std::shared_ptr<NN::ANN>&,int): Invalid inputs - training: incompatible with network size.");
+		if(data_train.inp(n).size()!=nn_.nInp()) throw std::invalid_argument("NNOpt::train(std::shared_ptr<NN::ANN>&,int): Invalid inputs - training: incompatible with network size.");
 		if(data_train.out(n).size()!=nn_.nOut()) throw std::invalid_argument("NNOpt::train(std::shared_ptr<NN::ANN>&,int): Invalid inputs - training: incompatible with network size.");
 	}
 	for(int n=0; n<data_val.size(); ++n){
-		if(data_val.in(n).size()!=nn_.nIn()) throw std::invalid_argument("NNOpt::train(std::shared_ptr<NN::ANN>&,int): Invalid inputs - validation: incompatible with network size.");
+		if(data_val.inp(n).size()!=nn_.nInp()) throw std::invalid_argument("NNOpt::train(std::shared_ptr<NN::ANN>&,int): Invalid inputs - validation: incompatible with network size.");
 		if(data_val.out(n).size()!=nn_.nOut()) throw std::invalid_argument("NNOpt::train(std::shared_ptr<NN::ANN>&,int): Invalid inputs - validation: incompatible with network size.");
 	}
 	int nTrain_=0;
@@ -116,23 +117,23 @@ void NNOpt::train(int nbatchl, const MLData& data_train, const MLData& data_val)
 	
 	//==== compute input statistics ====
 	if(NN_TRAIN_PRINT_STATUS>0 && rank==0) std::cout<<"computing input statistics\n";
-	Eigen::VectorXd avg_in_loc=Eigen::VectorXd::Zero(nn_.nIn());
-	Eigen::VectorXd avg_in_tot=Eigen::VectorXd::Zero(nn_.nIn());
-	Eigen::VectorXd dev_in_loc=Eigen::VectorXd::Zero(nn_.nIn());
-	Eigen::VectorXd dev_in_tot=Eigen::VectorXd::Zero(nn_.nIn());
+	Eigen::VectorXd avg_in_loc=Eigen::VectorXd::Zero(nn_.nInp());
+	Eigen::VectorXd avg_in_tot=Eigen::VectorXd::Zero(nn_.nInp());
+	Eigen::VectorXd dev_in_loc=Eigen::VectorXd::Zero(nn_.nInp());
+	Eigen::VectorXd dev_in_tot=Eigen::VectorXd::Zero(nn_.nInp());
 	//compute average
 	for(int n=0; n<data_train.size(); ++n){
-		avg_in_loc.noalias()+=data_train.in(n);
+		avg_in_loc.noalias()+=data_train.inp(n);
 	}
-	MPI_Allreduce(avg_in_loc.data(),avg_in_tot.data(),nn_.nIn(),MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+	MPI_Allreduce(avg_in_loc.data(),avg_in_tot.data(),nn_.nInp(),MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
 	avg_in_tot/=nTrain_;
 	//compute deviation
 	for(int n=0; n<data_train.size(); ++n){
-		const Eigen::VectorXd diff=data_train.in(n)-avg_in_tot;
+		const Eigen::VectorXd diff=data_train.inp(n)-avg_in_tot;
 		dev_in_loc.noalias()+=diff.cwiseProduct(diff);
 	}
-	MPI_Allreduce(dev_in_loc.data(),dev_in_tot.data(),nn_.nIn(),MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
-	for(int i=0; i<nn_.nIn(); ++i) dev_in_tot[i]=std::sqrt(dev_in_tot[i]/(nTrain_-1.0));
+	MPI_Allreduce(dev_in_loc.data(),dev_in_tot.data(),nn_.nInp(),MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+	for(int i=0; i<nn_.nInp(); ++i) dev_in_tot[i]=std::sqrt(dev_in_tot[i]/(nTrain_-1.0));
 	//print
 	if(NN_TRAIN_PRINT_STATUS>0 && rank==0){
 		std::cout<<"avg - in = "<<avg_in_tot.transpose()<<"\n";
@@ -167,16 +168,16 @@ void NNOpt::train(int nbatchl, const MLData& data_train, const MLData& data_val)
 	if(NN_TRAIN_PRINT_STATUS>0 && rank==0) std::cout<<"pre-conditioning input\n";
 	//set bias and weight
 	if(preCond_){
-		for(int i=0; i<nn_.nIn(); ++i) nn_.inb()[i]=-1.0*avg_in_tot[i];
-		for(int i=0; i<nn_.nIn(); ++i) nn_.inw()[i]=1.0/dev_in_tot[i];
+		for(int i=0; i<nn_.nInp(); ++i) nn_.inpb()[i]=-1.0*avg_in_tot[i];
+		for(int i=0; i<nn_.nInp(); ++i) nn_.inpw()[i]=1.0/dev_in_tot[i];
 	} else {
-		for(int i=0; i<nn_.nIn(); ++i) nn_.inb()[i]=0.0;
-		for(int i=0; i<nn_.nIn(); ++i) nn_.inw()[i]=1.0;
+		for(int i=0; i<nn_.nInp(); ++i) nn_.inpb()[i]=0.0;
+		for(int i=0; i<nn_.nInp(); ++i) nn_.inpw()[i]=1.0;
 	}
 	//print
 	if(NN_TRAIN_PRINT_STATUS>0 && rank==0){
-		std::cout<<"bias-in  = "<<nn_.inb().transpose()<<"\n";
-		std::cout<<"scale-in = "<<nn_.inw().transpose()<<"\n";
+		std::cout<<"bias-in  = "<<nn_.inpb().transpose()<<"\n";
+		std::cout<<"scale-in = "<<nn_.inpw().transpose()<<"\n";
 	}
 	
 	//==== postcondition the output ====
@@ -196,90 +197,91 @@ void NNOpt::train(int nbatchl, const MLData& data_train, const MLData& data_val)
 	
 	//==== initalize the optimizer ====
 	if(NN_TRAIN_PRINT_STATUS>0 && rank==0) std::cout<<"initializing the optimizer\n";
-	data_.init(nn_.size());
-	model_->init(nn_.size());
+	obj_.resize(nn_.size());
+	algo_->resize(nn_.size());
 	
 	//==== set the initial values ====
 	if(NN_TRAIN_PRINT_STATUS>0 && rank==0) std::cout<<"setting the initial values\n";
 	//set values
-	nn_>>data_.p();
-	nn_>>data_.pOld();
-	data_.g().setZero();
-	data_.gOld().setZero();
+	nn_>>obj_.p();
+	nn_>>obj_.pOld();
+	obj_.g().setZero();
+	obj_.gOld().setZero();
 	
 	//==== allocate status vectors ====
 	std::vector<int> step;
 	std::vector<double> gamma,err_t,err_v;
 	if(rank==0){
-		step.resize(data_.max()/data_.nPrint());
-		gamma.resize(data_.max()/data_.nPrint());
-		err_v.resize(data_.max()/data_.nPrint());
-		err_t.resize(data_.max()/data_.nPrint());
+		step.resize(obj_.max()/obj_.nPrint());
+		gamma.resize(obj_.max()/obj_.nPrint());
+		err_v.resize(obj_.max()/obj_.nPrint());
+		err_t.resize(obj_.max()/obj_.nPrint());
 	}
 	
 	//==== execute the optimization ====
 	if(NN_TRAIN_PRINT_STATUS>0 && rank==0) std::cout<<"executing the optimization\n";
 	//bcast parameters
-	MPI_Bcast(data_.p().data(),data_.dim(),MPI_DOUBLE,0,MPI_COMM_WORLD);
-	Eigen::VectorXd gSum_(data_.dim());
+	MPI_Bcast(obj_.p().data(),obj_.dim(),MPI_DOUBLE,0,MPI_COMM_WORLD);
+	Eigen::VectorXd gSum_(obj_.dim());
 	bool fbreak=false;
 	const double nbatchi_=1.0/batch_.size();
 	const double nVali_=1.0/nVal_;
 	cost_.resize(nn_);
 	Clock clock;
 	clock.begin();
-	for(int iter=0; iter<data_.max(); ++iter){
+	for(int iter=0; iter<obj_.max(); ++iter){
 		double err_train_sum_=0,err_val_sum_=0;
 		//set the parameters of the network
-		nn_<<data_.p();
+		nn_<<obj_.p();
 		//compute the error and gradient
 		error(data_train,data_val);
 		//accumulate error
 		MPI_Reduce(&err_train_,&err_train_sum_,1,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
 		MPI_Reduce(&err_val_,&err_val_sum_,1,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
 		//accumulate gradient
-		MPI_Reduce(data_.g().data(),gSum_.data(),data_.dim(),MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
+		MPI_Reduce(obj_.g().data(),gSum_.data(),obj_.dim(),MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
 		//compute step
 		if(rank==0){
 			//normalize error and gradient
 			err_train_=err_train_sum_*nbatchi_;
 			err_val_=err_val_sum_*nVali_;
-			data_.g().noalias()=gSum_*nbatchi_;
+			obj_.g().noalias()=gSum_*nbatchi_;
 			//compute regularization error and gradient
 			//print error
-			if(data_.step()%data_.nPrint()==0){
-				const int t=iter/data_.nPrint();
-				step[t]=data_.step();
-				gamma[t]=model_->gamma();
+			if(obj_.step()%obj_.nPrint()==0){
+				const int t=iter/obj_.nPrint();
+				step[t]=obj_.step();
+				gamma[t]=obj_.gamma();
 				err_t[t]=std::sqrt(2.0*err_train_);
 				err_v[t]=std::sqrt(2.0*err_val_);
 				printf("opt %8i gamma %12.10f err_t %12.10f err_v %12.10f\n",step[t],gamma[t],err_t[t],err_v[t]);
 			}
 			//compute the new position
-			data_.val()=err_train_;
-			model_->step(data_);
+			obj_.val()=err_train_;
+			obj_.gamma()=decay_->step(obj_);
+			algo_->step(obj_);
 			//compute the difference
-			data_.dv()=std::fabs(data_.val()-data_.valOld());
-			data_.dp()=(data_.p()-data_.pOld()).norm();
+			obj_.dv()=std::fabs(obj_.val()-obj_.valOld());
+			obj_.dp()=(obj_.p()-obj_.pOld()).norm();
 			//set the new "old" values
-			data_.pOld()=data_.p();//set "old" p value
-			data_.gOld()=data_.g();//set "old" g value
-			data_.valOld()=data_.val();//set "old" value
+			obj_.pOld()=obj_.p();//set "old" p value
+			obj_.gOld()=obj_.g();//set "old" g value
+			obj_.valOld()=obj_.val();//set "old" value
 			//check the break condition
-			switch(data_.stop()){
-				case Opt::Stop::FABS: fbreak=(data_.val()<data_.tol()); break;
-				case Opt::Stop::FREL: fbreak=(data_.dv()<data_.tol()); break;
-				case Opt::Stop::XREL: fbreak=(data_.dp()<data_.tol()); break;
+			switch(obj_.stop()){
+				case opt::Stop::FABS: fbreak=(obj_.val()<obj_.tol()); break;
+				case opt::Stop::FREL: fbreak=(obj_.dv()<obj_.tol()); break;
+				case opt::Stop::XREL: fbreak=(obj_.dp()<obj_.tol()); break;
 			}
 		}
 		//bcast parameters
-		MPI_Bcast(data_.p().data(),data_.p().size(),MPI_DOUBLE,0,MPI_COMM_WORLD);
+		MPI_Bcast(obj_.p().data(),obj_.p().size(),MPI_DOUBLE,0,MPI_COMM_WORLD);
 		//bcast break condition
 		MPI_Bcast(&fbreak,1,MPI_C_BOOL,0,MPI_COMM_WORLD);
 		if(fbreak) break;
 		//increment step
-		++data_.step();
-		++data_.count();
+		++obj_.step();
+		++obj_.count();
 	}
 	clock.end();
 	MPI_Barrier(MPI_COMM_WORLD);
@@ -303,8 +305,8 @@ void NNOpt::train(int nbatchl, const MLData& data_train, const MLData& data_val)
 		char* str=new char[print::len_buf];
 		std::cout<<print::buf(str)<<"\n";
 		std::cout<<print::title("OPT - SUMMARY",str)<<"\n";
-		std::cout<<"n-steps = "<<data_.step()<<"\n";
-		std::cout<<"opt-val = "<<data_.val()<<"\n";
+		std::cout<<"n-steps = "<<obj_.step()<<"\n";
+		std::cout<<"opt-val = "<<obj_.val()<<"\n";
 		std::cout<<"time    = "<<clock.duration()<<"\n";
 		std::cout<<print::title("OPT - SUMMARY",str)<<"\n";
 		std::cout<<print::buf(str)<<"\n";
@@ -323,7 +325,7 @@ double NNOpt::error(const MLData& data_train, const MLData& data_val){
 	Eigen::VectorXd dcdo=Eigen::VectorXd::Zero(nn_.nOut());
 	
 	//reset the gradient
-	Eigen::VectorXd& grad=data_.g();
+	Eigen::VectorXd& grad=obj_.g();
 	grad.setZero();
 	
 	//randomize the batch
@@ -339,11 +341,11 @@ double NNOpt::error(const MLData& data_train, const MLData& data_val){
 	for(int i=0; i<batch_.size(); ++i){
 		const int ii=batch_[i];
 		//set the inputs
-		nn_.in()=data_train.in(ii);
+		nn_.inp()=data_train.inp(ii);
 		//execute the network
-		nn_.execute();
+		nn_.fpbp();
 		//compute the error and dcdo
-		err_train_+=Opt::Loss::error(loss_,nn_.out(),data_train.out(ii),dcdo);
+		err_train_+=opt::Loss::error(obj_.loss(),nn_.out(),data_train.out(ii),dcdo);
 		//compute the gradient
 		cost_.grad(nn_,dcdo);
 		//add the gradient
@@ -352,14 +354,14 @@ double NNOpt::error(const MLData& data_train, const MLData& data_val){
 	
 	//compute the validation error
 	err_val_=0;
-	if(data_.step()%data_.nPrint()==0 || data_.step()%data_.nWrite()==0){
+	if(obj_.step()%obj_.nPrint()==0 || obj_.step()%obj_.nWrite()==0){
 		for(int i=0; i<data_val.size(); ++i){
 			//set the inputs
-			nn_.in()=data_val.in(i);
+			nn_.inp()=data_val.inp(i);
 			//execute the network
-			nn_.execute();
+			nn_.fp();
 			//compute the error
-			err_val_+=Opt::Loss::error(loss_,nn_.out(),data_val.out(i));
+			err_val_+=opt::Loss::error(obj_.loss(),nn_.out(),data_val.out(i));
 		}
 	}
 	
@@ -378,24 +380,11 @@ namespace serialize{
 		int size=0;
 		size+=sizeof(bool);//preCond_
 		size+=sizeof(bool);//postCond_
-		size+=sizeof(int);//loss_
 		size+=nbytes(obj.batch());
-		size+=nbytes(obj.data());
-		size+=sizeof(Opt::Loss);
+		size+=nbytes(obj.obj());
+		size+=nbytes(obj.algo());
+		size+=nbytes(obj.decay());
 		size+=nbytes(obj.nn());
-		switch(obj.data().algo()){
-			case Opt::Algo::SGD:      size+=nbytes(static_cast<const Opt::SGD&>(*obj.model())); break;
-			case Opt::Algo::SDM:      size+=nbytes(static_cast<const Opt::SDM&>(*obj.model())); break;
-			case Opt::Algo::NAG:      size+=nbytes(static_cast<const Opt::NAG&>(*obj.model())); break;
-			case Opt::Algo::ADAGRAD:  size+=nbytes(static_cast<const Opt::ADAGRAD&>(*obj.model())); break;
-			case Opt::Algo::ADADELTA: size+=nbytes(static_cast<const Opt::ADADELTA&>(*obj.model())); break;
-			case Opt::Algo::RMSPROP:  size+=nbytes(static_cast<const Opt::RMSPROP&>(*obj.model())); break;
-			case Opt::Algo::ADAM:     size+=nbytes(static_cast<const Opt::ADAM&>(*obj.model())); break;
-			case Opt::Algo::NADAM:    size+=nbytes(static_cast<const Opt::NADAM&>(*obj.model())); break;
-			case Opt::Algo::BFGS:     size+=nbytes(static_cast<const Opt::BFGS&>(*obj.model())); break;
-			case Opt::Algo::RPROP:    size+=nbytes(static_cast<const Opt::RPROP&>(*obj.model())); break;
-			default: throw std::runtime_error("nbytes(const NNPotOpt&): Invalid optimization method."); break;
-		}
 		size+=sizeof(bool);//restart_
 		size+=nbytes(obj.file_error());//file_error_
 		size+=nbytes(obj.file_restart());//file_restart_
@@ -411,23 +400,11 @@ namespace serialize{
 		int pos=0;
 		std::memcpy(arr+pos,&obj.preCond(),sizeof(bool)); pos+=sizeof(bool);
 		std::memcpy(arr+pos,&obj.postCond(),sizeof(bool)); pos+=sizeof(bool);
-		std::memcpy(arr+pos,&obj.loss(),sizeof(int)); pos+=sizeof(int);
 		pos+=pack(obj.batch(),arr+pos);
-		pos+=pack(obj.data(),arr+pos);
+		pos+=pack(obj.obj(),arr+pos);
+		pos+=pack(obj.algo(),arr+pos);
+		pos+=pack(obj.decay(),arr+pos);
 		pos+=pack(obj.nn(),arr+pos);
-		switch(obj.data().algo()){
-			case Opt::Algo::SGD:      pos+=pack(static_cast<const Opt::SGD&>(*obj.model()),arr+pos); break;
-			case Opt::Algo::SDM:      pos+=pack(static_cast<const Opt::SDM&>(*obj.model()),arr+pos); break;
-			case Opt::Algo::NAG:      pos+=pack(static_cast<const Opt::NAG&>(*obj.model()),arr+pos); break;
-			case Opt::Algo::ADAGRAD:  pos+=pack(static_cast<const Opt::ADAGRAD&>(*obj.model()),arr+pos); break;
-			case Opt::Algo::ADADELTA: pos+=pack(static_cast<const Opt::ADADELTA&>(*obj.model()),arr+pos); break;
-			case Opt::Algo::RMSPROP:  pos+=pack(static_cast<const Opt::RMSPROP&>(*obj.model()),arr+pos); break;
-			case Opt::Algo::ADAM:     pos+=pack(static_cast<const Opt::ADAM&>(*obj.model()),arr+pos); break;
-			case Opt::Algo::NADAM:    pos+=pack(static_cast<const Opt::NADAM&>(*obj.model()),arr+pos); break;
-			case Opt::Algo::BFGS:     pos+=pack(static_cast<const Opt::BFGS&>(*obj.model()),arr+pos); break;
-			case Opt::Algo::RPROP:    pos+=pack(static_cast<const Opt::RPROP&>(*obj.model()),arr+pos); break;
-			default: throw std::runtime_error("pack(const NNPotOpt&,char*): Invalid optimization method."); break;
-		}
 		std::memcpy(arr+pos,&obj.restart(),sizeof(bool)); pos+=sizeof(bool);
 		pos+=pack(obj.file_error(),arr+pos);
 		pos+=pack(obj.file_restart(),arr+pos);
@@ -443,55 +420,11 @@ namespace serialize{
 		int pos=0;
 		std::memcpy(&obj.preCond(),arr+pos,sizeof(bool)); pos+=sizeof(bool);
 		std::memcpy(&obj.postCond(),arr+pos,sizeof(bool)); pos+=sizeof(bool);
-		std::memcpy(&obj.loss(),arr+pos,sizeof(int)); pos+=sizeof(int);
 		pos+=unpack(obj.batch(),arr+pos);
-		pos+=unpack(obj.data(),arr+pos);
+		pos+=unpack(obj.obj(),arr+pos);
+		pos+=unpack(obj.algo(),arr+pos);
+		pos+=unpack(obj.decay(),arr+pos);
 		pos+=unpack(obj.nn(),arr+pos);
-		switch(obj.data().algo()){
-			case Opt::Algo::SGD:
-				obj.model().reset(new Opt::SGD());
-				pos+=unpack(static_cast<Opt::SGD&>(*obj.model()),arr+pos);
-			break;
-			case Opt::Algo::SDM:
-				obj.model().reset(new Opt::SDM());
-				pos+=unpack(static_cast<Opt::SDM&>(*obj.model()),arr+pos);
-			break;
-			case Opt::Algo::NAG:
-				obj.model().reset(new Opt::NAG());
-				pos+=unpack(static_cast<Opt::NAG&>(*obj.model()),arr+pos);
-			break;
-			case Opt::Algo::ADAGRAD:
-				obj.model().reset(new Opt::ADAGRAD());
-				pos+=unpack(static_cast<Opt::ADAGRAD&>(*obj.model()),arr+pos);
-			break;
-			case Opt::Algo::ADADELTA:
-				obj.model().reset(new Opt::ADADELTA());
-				pos+=unpack(static_cast<Opt::ADADELTA&>(*obj.model()),arr+pos);
-			break;
-			case Opt::Algo::RMSPROP:
-				obj.model().reset(new Opt::RMSPROP());
-				pos+=unpack(static_cast<Opt::RMSPROP&>(*obj.model()),arr+pos);
-			break;
-			case Opt::Algo::ADAM:
-				obj.model().reset(new Opt::ADAM());
-				pos+=unpack(static_cast<Opt::ADAM&>(*obj.model()),arr+pos);
-			break;
-			case Opt::Algo::NADAM:
-				obj.model().reset(new Opt::NADAM());
-				pos+=unpack(static_cast<Opt::NADAM&>(*obj.model()),arr+pos);
-			break;
-			case Opt::Algo::BFGS:
-				obj.model().reset(new Opt::BFGS());
-				pos+=unpack(static_cast<Opt::BFGS&>(*obj.model()),arr+pos);
-			break;
-			case Opt::Algo::RPROP:
-				obj.model().reset(new Opt::RPROP());
-				pos+=unpack(static_cast<Opt::RPROP&>(*obj.model()),arr+pos);
-			break;
-			default:
-				throw std::runtime_error("unpack(NNOpt&,const char*): Invalid optimization method.");
-			break;
-		}
 		std::memcpy(&obj.restart(),arr+pos,sizeof(bool)); pos+=sizeof(bool);
 		pos+=unpack(obj.file_error(),arr+pos);
 		pos+=unpack(obj.file_restart(),arr+pos);

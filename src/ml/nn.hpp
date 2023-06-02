@@ -3,19 +3,21 @@
 #define NN_HPP
 
 #define EIGEN_NO_DEBUG
+//#define EIGEN_USE_MKL_ALL
 
 // c++ libraries
 #include <iosfwd>
 // eigen
 #include <Eigen/Dense>
-// ann - math
+// math
 #include "src/math/random.hpp"
-// ann - mem
+// mem
 #include "src/mem/serialize.hpp"
-// ann - typedef
-#include "src/util/typedef.hpp"
 
 namespace NN{
+
+typedef Eigen::Matrix<double,Eigen::Dynamic,1> VecXd;
+typedef Eigen::Matrix<double,Eigen::Dynamic,Eigen::Dynamic> MatXd;
 	
 //***********************************************************************
 // COMPILER DIRECTIVES
@@ -38,25 +40,24 @@ namespace NN{
 //***********************************************************************
 
 class ANN;
-class ANNInit;
-class Cost;
-class DOutDVal;
-class DOutDP;
-class D2OutDPDVal;
+class ANNP;
 
 //***********************************************************************
 // INITIALIZATION METHOD
 //***********************************************************************
 
+/**
+* Initialization scheme for the neural network weights.
+*/
 class Init{
 public:
 	//enum
 	enum Type{
 		UNKNOWN=0,
 		RAND=1,
-		XAVIER=2,
+		LECUN=2,
 		HE=3,
-		MEAN=4
+		XAVIER=4
 	};
 	//constructor
 	Init():t_(Type::UNKNOWN){}
@@ -74,10 +75,10 @@ private:
 std::ostream& operator<<(std::ostream& out, const Init& init);
 
 //***********************************************************************
-// TRANSFER FUNCTIONS 
+// Neuron
 //***********************************************************************
 
-class Transfer{
+class Neuron{
 public:
 	//type
 	enum Type{
@@ -94,120 +95,153 @@ public:
 		GELU=10,
 		SWISH=11,
 		MISH=12,
-		TANHRE=13
+		TANHRE=13,
+		LOGCOSH=14,
+		IQUAD=15,
+		IFABS=16,
+		SINSIG=17
 	};
 	//constructor
-	Transfer():t_(Type::UNKNOWN){}
-	Transfer(Type t):t_(t){}
+	Neuron():t_(Type::UNKNOWN){}
+	Neuron(Type t):t_(t){}
 	//operators
 	operator Type()const{return t_;}
 	//member functions
-	static Transfer read(const char* str);
-	static const char* name(const Transfer& tf);
-	//function
-	static void tf_lin(VecXd& f, VecXd& d);
-	static void tf_sigmoid(VecXd& f, VecXd& d);
-	static void tf_tanh(VecXd& f, VecXd& d);
-	static void tf_isru(VecXd& f, VecXd& d);
-	static void tf_arctan(VecXd& f, VecXd& d);
-	static void tf_softsign(VecXd& f, VecXd& d);
-	static void tf_relu(VecXd& f, VecXd& d);
-	static void tf_softplus(VecXd& f, VecXd& d);
-	static void tf_elu(VecXd& f, VecXd& d);
-	static void tf_gelu(VecXd& f, VecXd& d);
-	static void tf_swish(VecXd& f, VecXd& d);
-	static void tf_mish(VecXd& f, VecXd& d);
-	static void tf_tanhre(VecXd& f, VecXd& d);
+	static Neuron read(const char* str);
+	static const char* name(const Neuron& neuron);
 private:
 	Type t_;
 	//prevent automatic conversion for other built-in types
 	//template<typename T> operator T() const;
 };
-std::ostream& operator<<(std::ostream& out, const Transfer& tf);
+std::ostream& operator<<(std::ostream& out, const Neuron& neuron);
+
+//***********************************************************************
+// AF_FP - Activation Function - Forward Pass
+//***********************************************************************
+
+class AFFP{
+public:
+	//function
+	static void af_lin(const VecXd& z, VecXd& a);
+	static void af_sigmoid(const VecXd& z, VecXd& a);
+	static void af_tanh(const VecXd& z, VecXd& a);
+	static void af_isru(const VecXd& z, VecXd& a);
+	static void af_arctan(const VecXd& z, VecXd& a);
+	static void af_softsign(const VecXd& z, VecXd& a);
+	static void af_relu(const VecXd& z, VecXd& a);
+	static void af_softplus(const VecXd& z, VecXd& a);
+	static void af_elu(const VecXd& z, VecXd& a);
+	static void af_gelu(const VecXd& z, VecXd& a);
+	static void af_swish(const VecXd& z, VecXd& a);
+	static void af_mish(const VecXd& z, VecXd& a);
+	static void af_tanhre(const VecXd& z, VecXd& a);
+	static void af_logcosh(const VecXd& z, VecXd& a);
+	static void af_iquad(const VecXd& z, VecXd& a);
+	static void af_ifabs(const VecXd& z, VecXd& a);
+	static void af_sinsig(const VecXd& z, VecXd& a);
+};
+
+//***********************************************************************
+// AF_FPBP - Activation Function - Forward Pass + Backward Pass
+//***********************************************************************
+
+class AFFPBP{
+public:
+	//function
+	static void af_lin(const VecXd& z, VecXd& a, VecXd& d);
+	static void af_sigmoid(const VecXd& z, VecXd& a, VecXd& d);
+	static void af_tanh(const VecXd& z, VecXd& a, VecXd& d);
+	static void af_isru(const VecXd& z, VecXd& a, VecXd& d);
+	static void af_arctan(const VecXd& z, VecXd& a, VecXd& d);
+	static void af_softsign(const VecXd& z, VecXd& a, VecXd& d);
+	static void af_relu(const VecXd& z, VecXd& a, VecXd& d);
+	static void af_softplus(const VecXd& z, VecXd& a, VecXd& d);
+	static void af_elu(const VecXd& z, VecXd& a, VecXd& d);
+	static void af_gelu(const VecXd& z, VecXd& a, VecXd& d);
+	static void af_swish(const VecXd& z, VecXd& a, VecXd& d);
+	static void af_mish(const VecXd& z, VecXd& a, VecXd& d);
+	static void af_tanhre(const VecXd& z, VecXd& a, VecXd& d);
+	static void af_logcosh(const VecXd& z, VecXd& a, VecXd& d);
+	static void af_iquad(const VecXd& z, VecXd& a, VecXd& d);
+	static void af_ifabs(const VecXd& z, VecXd& a, VecXd& d);
+	static void af_sinsig(const VecXd& z, VecXd& a, VecXd& d);
+};
+
+//***********************************************************************
+// AF_FPBP2 - Activation Function - Forward Pass + Backward Pass + 2nd derivative
+//***********************************************************************
+
+class AFFPBP2{
+public:
+	//function
+	static void af_lin(const VecXd& z, VecXd& a, VecXd& d, VecXd& d2);
+	static void af_sigmoid(const VecXd& z, VecXd& a, VecXd& d, VecXd& d2);
+	static void af_tanh(const VecXd& z, VecXd& a, VecXd& d, VecXd& d2);
+	static void af_isru(const VecXd& z, VecXd& a, VecXd& d, VecXd& d2);
+	static void af_arctan(const VecXd& z, VecXd& a, VecXd& d, VecXd& d2);
+	static void af_softsign(const VecXd& z, VecXd& a, VecXd& d, VecXd& d2);
+	static void af_relu(const VecXd& z, VecXd& a, VecXd& d, VecXd& d2);
+	static void af_softplus(const VecXd& z, VecXd& a, VecXd& d, VecXd& d2);
+	static void af_elu(const VecXd& z, VecXd& a, VecXd& d, VecXd& d2);
+	static void af_gelu(const VecXd& z, VecXd& a, VecXd& d, VecXd& d2);
+	static void af_swish(const VecXd& z, VecXd& a, VecXd& d, VecXd& d2);
+	static void af_mish(const VecXd& z, VecXd& a, VecXd& d, VecXd& d2);
+	static void af_tanhre(const VecXd& z, VecXd& a, VecXd& d, VecXd& d2);
+	static void af_logcosh(const VecXd& z, VecXd& a, VecXd& d, VecXd& d2);
+	static void af_iquad(const VecXd& z, VecXd& a, VecXd& d, VecXd& d2);
+	static void af_ifabs(const VecXd& z, VecXd& a, VecXd& d, VecXd& d2);
+	static void af_sinsig(const VecXd& z, VecXd& a, VecXd& d, VecXd& d2);
+};
 
 //***********************************************************************
 // ANN
 //***********************************************************************
 
-/*
-DEFINITIONS:
-	ensemble - total set of all data (e.g. training "ensemble")
-	element - single datum from ensemble
-	c - "c" donotes the cost function, e.g. the gradient of the cost function w.r.t. the value of a node is dc/da
-	z - "z" is the input to each node, e.g. the gradient of a node w.r.t. to its input is da/dz
-	a - "a" is the value of a node, e.g. the gradient of a node w.r.t. to its input is da/dz
-	o - "o" is the output of the network (i.e. out_), e.g. the gradient of the output w.r.t. the input is do/di
-	i - "i" is the input of the network (i.e. in_), e.g. the gradient of the output w.r.t. the input is do/di
-PRIVATE:
-	VecXd in_ - raw input data for a single element of the ensemble (e.g. training set)
-	VecXd inw_ - weight used to scale the input data
-	VecXd inb_ - bias used to shift the input data
-	VecXd out_ - raw output data given a single input element
-	VecXd outw_ - weight used to scale the output data
-	VecXd outb_ - bias used to shift the output data
-	int nlayer_ - 
-		total number of hidden layers
-		best thought of as the number of "connections" between layers
-		nlayer_ must be greater than zero for an initialized network
-		this is true even for a network with zero "hidden" layers
-		an uninitialized network has nlayer_ = 0
-		if we have just the input and output: nlayer_ = 1
-			one set of weights,biases connecting input/output
-		if we have one hidden layer: nlayer_ = 2
-			two sets of weights,biases connecting input/layer0/output
-		if we have two hidden layers: nlayer_ = 3
-			three sets of weights,biases connecting input/layer0/layer1/output
-		et cetera
-	std::vector<VecXd> node_ - 
-		all nodes, including the input, output, and hidden layers
-		the raw input and output (in_,out_) are separate from "node_"
-		this is because the raw input/output may be shifted/scaled before being used
-		thus, while in_/out_ are the "raw" input/output,
-		the front/back of "node_" can be thought of the "scaled" input/output
-		note that scaling is not necessary, but made optional with the use of in_/out_
-		has a size of "nlayer_+1", as there are "nlayer_" connections between "nlayer_+1" nodes
-	std::vector<VecXd> bias_ - 
-		the bias of each layer, best thought of as the bias "between" layers n,n+1
-		bias_[n] must have the size node_[n+1] - we add this bias when going from node_[n] to node_[n+1]
-		has a size of "nlayer_", as there are "nlayer_" connections between "nlayer_+1" nodes
-	std::vector<MatXd> edge_ -
-		the weights of each layer, best though of as transforming from layers n to n+1
-		edge_[n] must have the size (node_[n+1],node_[n]) - matrix multiplying (node_[n]) to get (node_[n+1])
-		has a size of "nlayer_", as there are "nlayer_" connections between "nlayer_+1" nodes
-	std::vector<VecXd> dadz_ - 
-		the gradient of the value of a node (a) w.r.t. the input of the node (z) - da/dz
-		practically, the gradient of the transfer function of each layer
-		best thought of as the gradient associated with function transferring "between" layers n,n+1
-		thus, dadz_[n] must have the size node_[n+1]
-		has a size of "nlayer_", as there are "nlayer_" connections between "nlayer_+1" nodes
-	tf_ -
-		the type of the transfer function
-		note the transfer function for the last layer is always linear
-	tfp_ - 
-		(Transfer Function, Function Derivative, Vector)
-		the transfer function for each layer, operates on entire vector at once
-		computes both function and derivative simultaneously
+/**
+* Class defining the function and parameters of an artificial neural network.
+* The neural network is defined by several layers of nodes, each represented by a vector.
+* Each set of nodes in a given layer is fully connected to the nodes in adjacent layers
+* by a set of edges with associated weights, represented as a matrix.
+* Each node has an associated input, bias, and value.  Given a set of inputs to the network,
+* the input for each node is determined by the product of the weight matrix by the values
+* of the previous layer added to the bias.  The value of each node is then determined by
+* the application of a "transfer" or "activation" function on the node input.
+*
+* Notations (used throughout this compilation unit):
+* c - "c" donotes the cost function, e.g. the gradient of the cost function w.r.t. the value of a node is dc/da
+* z - "z" is the input to each node, e.g. the gradient of a node w.r.t. to its input is da/dz
+* a - "a" is the value of a node, e.g. the gradient of a node w.r.t. to its input is da/dz
+* o - "o" is the output of the network, e.g. the gradient of the output w.r.t. the input is do/di
+* i - "i" is the input of the network, e.g. the gradient of the output w.r.t. the input is do/di
 */
 class ANN{
 private:
 	//typedefs
-		typedef void (*TFP)(VecXd&,VecXd&);
+		typedef void (*fAFFP)(const VecXd&,VecXd&);
+		typedef void (*fAFFPBP)(const VecXd&,VecXd&,VecXd&);
+		typedef void (*fAFFPBP2)(const VecXd&,VecXd&,VecXd&,VecXd&);
 	//layers
 		int nlayer_;//number of layers (weights,biases)
 	//transfer functions
-		Transfer tf_;//transfer function type
-		std::vector<TFP> tfp_;//transfer function - input for indexed layer (nlayer_)
+		Neuron neuron_;//transfer function type
+		std::vector<fAFFP> affp_;//transfer functions
+		std::vector<fAFFPBP> affpbp_;//transfer functions
+		std::vector<fAFFPBP2> affpbp2_;//transfer functions
 	//input/output
-		VecXd in_;//input layer
-		VecXd out_;//output layer
-		VecXd inw_,inb_;//input weight, bias
+		VecXd inp_;//input - raw
+		VecXd ins_;//input - scaled and shifted
+		VecXd out_;//output
+		VecXd inpw_,inpb_;//input weight, bias
 		VecXd outw_,outb_;//output weight, bias
 	//gradients - nodes
-		std::vector<VecXd> dadz_;//node derivative - not including input layer (nlayer_)
+		std::vector<VecXd> dadz_;//transfer function first derivative
+		std::vector<VecXd> d2adz2_;//transfer function second derivative
 	//node weights and biases
-		std::vector<VecXd> node_;//nodes (nlayer_+1)
-		std::vector<VecXd> bias_;//bias (nlayer_)
-		std::vector<MatXd> edge_;//edges (nlayer_)
+		std::vector<VecXd> a_;//node values
+		std::vector<VecXd> z_;//node inputs
+		std::vector<VecXd> b_;//biases
+		std::vector<MatXd> w_;//weights
 public:
 	//==== constructors/destructors ====
 	ANN(){defaults();}
@@ -222,40 +256,57 @@ public:
 	//==== access ====
 	//network dimensions
 		int nlayer()const{return nlayer_;}
-	//nodes
-		VecXd& in(){return in_;}
-		const VecXd& in()const{return in_;}
+	//input/output
+		VecXd& inp(){return inp_;}
+		const VecXd& inp()const{return inp_;}
+		VecXd& ins(){return ins_;}
+		const VecXd& ins()const{return ins_;}
 		VecXd& out(){return out_;}
 		const VecXd& out()const{return out_;}
-		VecXd& node(int n){return node_[n];}
-		const VecXd& node(int n)const{return node_[n];}
-		int nNodes(int n)const{return node_[n].size();}
 	//scaling
-		VecXd& inw(){return inw_;}
-		const VecXd& inw()const{return inw_;}
-		VecXd& inb(){return inb_;}
-		const VecXd& inb()const{return inb_;}
+		VecXd& inpw(){return inpw_;}
+		const VecXd& inpw()const{return inpw_;}
+		VecXd& inpb(){return inpb_;}
+		const VecXd& inpb()const{return inpb_;}
 		VecXd& outw(){return outw_;}
 		const VecXd& outw()const{return outw_;}
 		VecXd& outb(){return outb_;}
 		const VecXd& outb()const{return outb_;}
+	//nodes
+		VecXd& a(int l){return a_[l];}
+		const VecXd& a(int l)const{return a_[l];}
+		const std::vector<VecXd>& a()const{return a_;}
+		VecXd& z(int l){return z_[l];}
+		const VecXd& z(int l)const{return z_[l];}
+		const std::vector<VecXd>& z()const{return z_;}
 	//bias
-		VecXd& bias(int l){return bias_[l];}
-		const VecXd& bias(int l)const{return bias_[l];}
+		VecXd& b(int l){return b_[l];}
+		const VecXd& b(int l)const{return b_[l];}
+		const std::vector<VecXd>& b()const{return b_;}
 	//edge
-		MatXd& edge(int l){return edge_[l];}
-		const MatXd& edge(int l)const{return edge_[l];}
+		MatXd& w(int l){return w_[l];}
+		const MatXd& w(int l)const{return w_[l];}
+		const std::vector<MatXd>& w()const{return w_;}
 	//size
-		int nIn()const{return in_.size();}
+		int nInp()const{return inp_.size();}
 		int nOut()const{return out_.size();}
+		int nNodes(int n)const{return a_[n].size();}
 	//gradients - nodes
 		VecXd& dadz(int n){return dadz_[n];}
 		const VecXd& dadz(int n)const{return dadz_[n];}
+		const std::vector<VecXd>& dadz()const{return dadz_;}
+		VecXd& d2adz2(int n){return d2adz2_[n];}
+		const VecXd& d2adz2(int n)const{return d2adz2_[n];}
+		const std::vector<VecXd>& d2adz2()const{return d2adz2_;}
 	//transfer functions
-		Transfer& tf(){return tf_;}
-		const Transfer& tf()const{return tf_;}
-		TFP tfp(int l){return tfp_[l];}
-		const TFP tfp(int l)const{return tfp_[l];}
+		Neuron& neuron(){return neuron_;}
+		const Neuron& neuron()const{return neuron_;}
+		fAFFP affp(int l){return affp_[l];}
+		const fAFFP affp(int l)const{return affp_[l];}
+		fAFFPBP affpbp(int l){return affpbp_[l];}
+		const fAFFPBP affpbp(int l)const{return affpbp_[l];}
+		fAFFPBP2 affpbp2(int l){return affpbp2_[l];}
+		const fAFFPBP2 affpbp2(int l)const{return affpbp2_[l];}
 		
 	//==== member functions ====
 	//clearing/initialization
@@ -266,15 +317,21 @@ public:
 		int nBias()const;
 		int nWeight()const;
 	//resizing
-		void resize(const ANNInit& init, int nInput, int nOutput);
-		void resize(const ANNInit& init, int nInput, const std::vector<int>& nNodes, int nOutput);
-		void resize(const ANNInit& init, const std::vector<int>& nNodes);
+		void resize(const ANNP& init, int nInput, int nOutput);
+		void resize(const ANNP& init, int nInput, const std::vector<int>& nNodes, int nOutput);
+		void resize(const ANNP& init, const std::vector<int>& nNodes);
+		void resize(const ANNP& init, int nInput, const std::vector<int>& nNodes);
+		void reset(const ANNP& init);
 	//error
 		double error_lambda()const;
 		VecXd& grad_lambda(VecXd& grad)const;
 	//execution
-		const VecXd& execute();
-		const VecXd& execute(const VecXd& in){in_=in;return execute();}
+		const VecXd& fp();
+		const VecXd& fpbp();
+		const VecXd& fpbp2();
+		const VecXd& fp(const VecXd& inp){inp_=inp;return fp();}
+		const VecXd& fpbp(const VecXd& inp){inp_=inp;return fpbp();}
+		const VecXd& fpbp2(const VecXd& inp){inp_=inp;return fpbp2();}
 		
 	//==== static functions ====
 	static void write(FILE* writer, const ANN& nn);
@@ -283,59 +340,69 @@ public:
 	static void read(const char*, ANN& nn);
 };
 
-bool operator==(const ANN& n1, const ANN& n2);
-inline bool operator!=(const ANN& n1, const ANN& n2){return !(n1==n2);}
-
 //***********************************************************************
-// ANNInit
+// ANNP
 //***********************************************************************
 
-class ANNInit{
+/**
+* Class which stores Artificial Neural Network Parameters (ANNP).
+* These include a set of loosely related parameters which are important
+* for initializing a neural network but do not necessarily define the network 
+* and thus do not need to be stored with it.
+*/
+class ANNP{
 private:
+	int seed_;//random seed	
+	rng::dist::Name dist_;//distribution type
+	Init init_;//initialization scheme
+	Neuron neuron_;//nueron type
 	double bInit_;//initial value - bias
 	double wInit_;//initial value - weight
 	double sigma_;//distribution size parameter
-	rng::dist::Name dist_;//distribution type
-	Init init_;//initialization scheme
-	int seed_;//random seed	
 public:
 	//==== constructors/destructors ====
-	ANNInit(){defaults();}
-	~ANNInit(){}
+	ANNP(){defaults();}
+	~ANNP(){}
 	
 	//==== operators ====
-	friend std::ostream& operator<<(std::ostream& out, const ANNInit& init);
+	friend std::ostream& operator<<(std::ostream& out, const ANNP& init);
 	
 	//==== access ====
+	int& seed(){return seed_;}
+	const int& seed()const{return seed_;}
+	rng::dist::Name& dist(){return dist_;}
+	const rng::dist::Name& dist()const{return dist_;}
+	Init& init(){return init_;}
+	const Init& init()const{return init_;}
+	Neuron& neuron(){return neuron_;}
+	const Neuron& neuron()const{return neuron_;}
 	double& bInit(){return bInit_;}
 	const double& bInit()const{return bInit_;}
 	double& wInit(){return wInit_;}
 	const double& wInit()const{return wInit_;}
 	double& sigma(){return sigma_;}
 	const double& sigma()const{return sigma_;}
-	rng::dist::Name& dist(){return dist_;}
-	const rng::dist::Name& dist()const{return dist_;}
-	Init& init(){return init_;}
-	const Init& init()const{return init_;}
-	int& seed(){return seed_;}
-	const int& seed()const{return seed_;}
 	
 	//==== member functions ====
 	void defaults();
 	void clear(){defaults();}
+	
+	//==== static functions ====
+	static void read(const char*, ANNP& annp);
+	static void read(FILE* writer, ANNP& annp);
 };
 
 //***********************************************************************
 // Cost
 //***********************************************************************
 
-/*
-dcdz_ - 
-	the gradient of the cost function (c) w.r.t. the node inputs (z) - dc/dz
+/**
+* Class for computing the derivative of a given cost function (c)
+* with respect to the weights and biases of the ntework.
 */
 class Cost{
 private:
-	std::vector<VecXd> dcdz_;//derivative of cost function w.r.t. node inputs (nlayer_)
+	std::vector<VecXd> dcdz_;//derivative of cost function (c) w.r.t. node inputs (z) (dc/dz)
 	VecXd grad_;//gradient of the cost function with respect to each parameter (bias + weight)
 public:
 	//==== constructors/destructors ====
@@ -356,37 +423,30 @@ public:
 };
 
 //***********************************************************************
-// DOutDVal
+// DODZ
 //***********************************************************************
 
-/*
-doda_ -
-	the derivative of the output (o) w.r.t. the value of all nodes (a)
-	has a size of "nlayer_+1" as we need to compute the gradient w.r.t. all nodes
-	thus, doda_[n] must of the size node_[n]
-	this includes the hidden layers as well as the input/ouput layers
-	note these are the scaled inputs/outputs
-dodi_ -
-	the derivative of the output w.r.t. the raw input
-	this is the first element of doda_ multiplied by the input scaling
+/**
+* Class for computing the derivative of network output (o) with respect
+* to the node inputs (z)
 */
-class DOutDVal{
+class DODZ{
 private:
-	MatXd dodi_;//derivative of out_ w.r.t. to in_ (out_.size() x in_.size())
-	std::vector<MatXd> doda_;//derivative of out_ w.r.t. to the value "a" of all nodes (nlayer_+1)
+	MatXd dodi_;//gradient of the output (o) w.r.t. the network inputs (i) (do/di)
+	std::vector<MatXd> dodz_;//gradient of the output (o) w.r.t. node inputs (z) (do/dz)
 public:
 	//==== constructors/destructors ====
-	DOutDVal(){}
-	DOutDVal(const ANN& nn){resize(nn);}
-	~DOutDVal(){}
+	DODZ(){}
+	DODZ(const ANN& nn){resize(nn);}
+	~DODZ(){}
 	
 	//==== access ====
 	MatXd& dodi(){return dodi_;}
 	const MatXd& dodi()const{return dodi_;}
-	MatXd& doda(int n){return doda_[n];}
-	const MatXd& doda(int n)const{return doda_[n];}
-	std::vector<MatXd>& doda(){return doda_;}
-	const std::vector<MatXd>& doda()const{return doda_;}
+	MatXd& dodz(int n){return dodz_[n];}
+	const MatXd& dodz(int n)const{return dodz_[n];}
+	std::vector<MatXd>& dodz(){return dodz_;}
+	const std::vector<MatXd>& dodz()const{return dodz_;}
 	
 	//==== member functions ====
 	void clear();
@@ -395,29 +455,32 @@ public:
 };
 
 //***********************************************************************
-// DOutDP
+// DODP
 //***********************************************************************
 
-class DOutDP{
+/**
+* Class for computing the derivative of network output (o) with respect
+* to the parameters (p) of the network (i.e. weights and biases)
+*/
+class DODP{
 private:
 	std::vector<MatXd> dodz_;//derivative of output w.r.t. node inputs (nlayer_)
 	std::vector<std::vector<VecXd> > dodb_;//derivative of output w.r.t. biases
 	std::vector<std::vector<MatXd> > dodw_;//derivative of output w.r.t. weights
 public:
 	//==== constructors/destructors ====
-	DOutDP(){}
-	DOutDP(const ANN& nn){resize(nn);}
-	~DOutDP(){}
+	DODP(){}
+	DODP(const ANN& nn){resize(nn);}
+	~DODP(){}
 	
 	//==== access ====
-	MatXd& dodz(int n){return dodz_[n];}
-	const MatXd& dodz(int n)const{return dodz_[n];}
+	//dodz
 	std::vector<MatXd>& dodz(){return dodz_;}
 	const std::vector<MatXd>& dodz()const{return dodz_;}
-	MatXd& dodb(int n){return dodz_[n];}
-	const MatXd& dodb(int n)const{return dodz_[n];}
+	//dodb
 	std::vector<std::vector<VecXd> >& dodb(){return dodb_;}
 	const std::vector<std::vector<VecXd> >& dodb()const{return dodb_;}
+	//dodw
 	std::vector<std::vector<MatXd> >& dodw(){return dodw_;}
 	const std::vector<std::vector<MatXd> >& dodw()const{return dodw_;}
 	
@@ -428,26 +491,97 @@ public:
 };
 
 //***********************************************************************
-// D2OutDPDVal
+// DZDI
 //***********************************************************************
 
-class D2OutDPDVal{
+/**
+* Class for computing the derivative of the node inputs (z) with respect
+* to the inputs to the network (i).
+*/
+class DZDI{
 private:
-	ANN nnc_;
-	DOutDVal dOutDVal_;
-	std::vector<MatXd> d2odpda_;
+	std::vector<MatXd> dzdi_;//gradient of (z) w.r.t. input (i) (dz/di)
+public:
+	//==== constructors/destructors ====
+	DZDI(){}
+	DZDI(const ANN& nn){resize(nn);}
+	~DZDI(){}
+	
+	//==== access ====
+	const std::vector<MatXd>& dzdi(){return dzdi_;}
+	MatXd& dzdi(int n){return dzdi_[n];}
+	const MatXd& dzdi(int n)const{return dzdi_[n];}
+	
+	//==== member functions ====
+	void clear();
+	void resize(const ANN& nn);
+	void grad(const ANN& nn);
+};
+
+//***********************************************************************
+// D2ODZDI
+//***********************************************************************
+
+/**
+* Class for computing the second derivative of the outputs (o) of a 
+* nueral network with respect to the node inputs (z) and the network
+* inputs (i), thus d2o/dzdi.
+*/
+class D2ODZDI{
+private:
+	DODZ dOdZ_;//gradient of the output (o) w.r.t. node inputs (z) (do/dz)
+	DZDI dZdI_;//gradient of the node inputs (z) w.r.t the network input (i) (dz/di)
+	std::vector<std::vector<MatXd> > d2odzdi_;//gradient of (o) w.r.t (z) and (i) (d2o/dzdi)
+	std::vector<std::vector<MatXd> > d2odbdi_;//gradient of (o) w.r.t (b) and (i) (d2o/dbdi)
+	std::vector<std::vector<std::vector<MatXd> > > d2odwdi_;//gradient of (o) w.r.t (w) and (i) (d2o/dwdi)
+	std::vector<MatXd> d2odpdi_;//gradient of (o) w.r.t (p) and (i) (d2o/dpdi)
+public:
+	//==== constructors/destructors ====
+	D2ODZDI(){}
+	D2ODZDI(const ANN& nn){resize(nn);}
+	~D2ODZDI(){}
+	
+	//==== access ====
+	std::vector<std::vector<MatXd> >& d2odzdi(){return d2odzdi_;}
+	std::vector<std::vector<MatXd> >& d2odbdi(){return d2odbdi_;}
+	std::vector<std::vector<std::vector<MatXd> > >& d2odwdi(){return d2odwdi_;}
+	std::vector<MatXd>& d2odpdi(){return d2odpdi_;}
+	
+	//==== member functions ====
+	void clear();
+	void resize(const ANN& nn);
+	void grad(const ANN& nn);
+};
+
+//***********************************************************************
+// D2ODZDIN
+//***********************************************************************
+
+/**
+* Class for computing the second derivative of the outputs (o) of a 
+* nueral network with respect to the node inputs (z) and the network
+* inputs (i), thus d2o/dzdi.
+* The gradient is computed in a brute force manner,
+* i.e. numerical differention.
+* Note: this is very slow and used only for testing purposes.
+*/
+class D2ODZDIN{
+private:
+	ANN nnc_;//neural network copy
+	DODZ dOdZ_;//gradient of the output (o) w.r.t. node inputs (z) (do/dz)
+	std::vector<MatXd> d2odpdi_;//gradient of (o) w.r.t (p) and (i) (d2o/dpdi)
 	MatXd pt1_,pt2_;
 public:
 	//==== constructors/destructors ====
-	D2OutDPDVal(){}
-	D2OutDPDVal(const ANN& nn){resize(nn);}
-	~D2OutDPDVal(){}
+	D2ODZDIN(){}
+	D2ODZDIN(const ANN& nn){resize(nn);}
+	~D2ODZDIN(){}
 	
 	//==== access ====
-	std::vector<MatXd>& d2odpda(){return d2odpda_;}
-	const std::vector<MatXd>& d2odpda()const{return d2odpda_;}
-	MatXd& d2odpda(int i){return d2odpda_[i];}
-	const MatXd& d2odpda(int i)const{return d2odpda_[i];}
+	std::vector<MatXd>& d2odpdi(){return d2odpdi_;}
+	const std::vector<MatXd>& d2odpdi()const{return d2odpdi_;}
+	MatXd& d2odpdi(int i){return d2odpdi_[i];}
+	const MatXd& d2odpdi(int i)const{return d2odpdi_[i];}
 	
 	//==== member functions ====
 	void clear();
@@ -467,21 +601,21 @@ namespace serialize{
 	// byte measures
 	//**********************************************
 	
-	template <> int nbytes(const NN::ANNInit& obj);
+	template <> int nbytes(const NN::ANNP& obj);
 	template <> int nbytes(const NN::ANN& obj);
 	
 	//**********************************************
 	// packing
 	//**********************************************
 	
-	template <> int pack(const NN::ANNInit& obj, char* arr);
+	template <> int pack(const NN::ANNP& obj, char* arr);
 	template <> int pack(const NN::ANN& obj, char* arr);
 	
 	//**********************************************
 	// unpacking
 	//**********************************************
 	
-	template <> int unpack(NN::ANNInit& obj, const char* arr);
+	template <> int unpack(NN::ANNP& obj, const char* arr);
 	template <> int unpack(NN::ANN& obj, const char* arr);
 	
 }
