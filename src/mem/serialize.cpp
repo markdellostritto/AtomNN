@@ -79,28 +79,28 @@ template <> int pack(const std::vector<std::string>& strlist, char* arr){
 }
 template <> int pack(const std::vector<int>& vec, char* arr){
 	int pos=0;
-	int temp=vec.size();
-	std::memcpy(arr+pos,&temp,sizeof(int)); pos+=sizeof(int);
-	for(int i=0; i<vec.size(); ++i){
-		std::memcpy(arr+pos,&vec[i],sizeof(int)); pos+=sizeof(int);
+	int size=vec.size();
+	std::memcpy(arr+pos,&size,sizeof(int)); pos+=sizeof(int);
+	if(size>0){
+		std::memcpy(arr+pos,vec.data(),size*sizeof(int)); pos+=size*sizeof(int);
 	}
 	return pos;
 }
 template <> int pack(const std::vector<unsigned int>& vec, char* arr){
 	int pos=0;
-	int temp=vec.size();
-	std::memcpy(arr+pos,&temp,sizeof(int)); pos+=sizeof(int);
-	for(int i=0; i<vec.size(); ++i){
-		std::memcpy(arr+pos,&vec[i],sizeof(unsigned int)); pos+=sizeof(unsigned int);
+	int size=vec.size();
+	std::memcpy(arr+pos,&size,sizeof(int)); pos+=sizeof(int);
+	if(size>0){
+		std::memcpy(arr+pos,vec.data(),size*sizeof(unsigned int)); pos+=size*sizeof(unsigned int);
 	}
 	return pos;
 }
 template <> int pack(const std::vector<double>& vec, char* arr){
 	int pos=0;
-	int temp=vec.size();
-	std::memcpy(arr+pos,&temp,sizeof(int)); pos+=sizeof(int);
-	for(int i=0; i<vec.size(); ++i){
-		std::memcpy(arr+pos,&vec[i],sizeof(double)); pos+=sizeof(double);
+	int size=vec.size();
+	std::memcpy(arr+pos,&size,sizeof(int)); pos+=sizeof(int);
+	if(size>0){
+		std::memcpy(arr+pos,vec.data(),size*sizeof(double)); pos+=size*sizeof(double);
 	}
 	return pos;
 }
@@ -152,9 +152,7 @@ template <> int unpack(std::vector<int>& vec, const char* arr){
 	std::memcpy(&size,arr+pos,sizeof(int)); pos+=sizeof(int);
 	if(size>0){
 		vec.resize(size);
-		for(int i=0; i<vec.size(); ++i){
-			std::memcpy(&vec[i],arr+pos,sizeof(int)); pos+=sizeof(int);
-		}
+		std::memcpy(vec.data(),arr+pos,size*sizeof(int)); pos+=size*sizeof(int);
 	} else vec.clear();
 	return pos;
 }
@@ -164,9 +162,7 @@ template <> int unpack(std::vector<unsigned int>& vec, const char* arr){
 	std::memcpy(&size,arr+pos,sizeof(int)); pos+=sizeof(int);
 	if(size>0){
 		vec.resize(size);
-		for(int i=0; i<vec.size(); ++i){
-			std::memcpy(&vec[i],arr+pos,sizeof(unsigned int)); pos+=sizeof(unsigned int);
-		}
+		std::memcpy(vec.data(),arr+pos,size*sizeof(unsigned int)); pos+=size*sizeof(unsigned int);
 	} else vec.clear();
 	return pos;
 }
@@ -176,9 +172,7 @@ template <> int unpack(std::vector<double>& vec, const char* arr){
 	std::memcpy(&size,arr+pos,sizeof(int)); pos+=sizeof(int);
 	if(size>0){
 		vec.resize(size);
-		for(int i=0; i<vec.size(); ++i){
-			std::memcpy(&vec[i],arr+pos,sizeof(double)); pos+=sizeof(double);
-		}
+		std::memcpy(vec.data(),arr+pos,size*sizeof(double)); pos+=size*sizeof(double);
 	} else vec.clear();
 	return pos;
 }

@@ -32,6 +32,7 @@ public:
 	void add(const T1& k, const T2& v);
 	void remove(const T1& k);
 	bool find(const T1& k)const;
+	int index(const T1& k)const;
 	void clear();
 	
 	//operators
@@ -79,6 +80,20 @@ bool Map<T1,T2>::find(const T1& k)const{
 	}
 	if(index<0) return false;
 	return true;
+}
+
+/**
+* find a key in the map
+* @param k - key
+* @return the index of the key in the map
+*/
+template <class T1, class T2>
+int Map<T1,T2>::index(const T1& k)const{
+	int index_=-1;
+	for(int i=0; i<key_.size(); ++i){
+		if(k==key_[i]){index_=i;break;}
+	}
+	return index_;
 }
 
 /**
