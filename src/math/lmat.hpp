@@ -3,7 +3,6 @@
 #define ANN_LMAT_HPP
 
 #include <vector>
-#include "src/math/cmp.hpp"
 
 /**
 * LMat - lower triangular matrix
@@ -42,13 +41,13 @@ public:
 
 template <class T>
 T& LMat<T>::operator()(int i, int j){
-	if(i<j) return mat_[i*(i+1)/2+j];
+	if(i>=j) return mat_[i*(i+1)/2+j];
 	else return mat_[j*(j+1)/2+i];
 }
 
 template <class T>
 const T& LMat<T>::operator()(int i, int j)const{
-	if(i<j) return mat_[i*(i+1)/2+j];
+	if(i>=j) return mat_[i*(i+1)/2+j];
 	else return mat_[j*(j+1)/2+i];
 }
 
@@ -62,7 +61,7 @@ void LMat<T>::clear(){
 
 template <class T>
 int LMat<T>::index(int i, int j)const{
-	if(i<j) return i*(i+1)/2+j;
+	if(i>=j) return i*(i+1)/2+j;
 	else return j*(j+1)/2+i;
 }
 

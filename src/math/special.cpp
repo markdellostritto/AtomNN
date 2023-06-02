@@ -1,9 +1,7 @@
 // c++ libraries
 #include <ostream>
 #include <stdexcept>
-// ann - math - func
-#include "src/math/func.hpp"
-// ann - math - special
+// math - special
 #include "src/math/special.hpp"
 
 namespace math{
@@ -90,6 +88,42 @@ namespace special{
 		}
 	}
 	
+	void tanhsech(double x, double& ftanh, double& fsech){
+		if(x>=0){
+			const double fexp=exp(-x);
+			const double fexp2=fexp*fexp;
+			const double den=1.0/(1.0+fexp2);
+			ftanh=(1.0-fexp2)*den;
+			fsech=2.0*fexp*den;
+		} else {
+			const double fexp=exp(x);
+			const double fexp2=fexp*fexp;
+			const double den=1.0/(1.0+fexp2);
+			ftanh=(fexp2-1.0)*den;
+			fsech=2.0*fexp*den;
+		}
+	}
+	
+	//**************************************************************
+	//Power
+	//**************************************************************
+	
+	double powint(double x, const int n){
+		double yy, ww;
+		if (n == 0) return 1.0;
+		if (x == 0.0) return 0.0;
+		int nn = (n > 0) ? n : -n;
+		ww = x;
+		for (yy = 1.0; nn != 0; nn >>= 1, ww *= ww)
+		if (nn & 1) yy *= ww;
+		return (n > 0) ? yy : 1.0 / yy;
+	}
+	
+	
+	double sqrta(double x){
+		return (256.0+x*(1792.0+x*(1120.0+x*(112.0+x))))/(1024.0+x*(1792.0+x*(448.0+x*16)));
+	}
+	
 	//**************************************************************
 	//Logarithm
 	//**************************************************************
@@ -118,24 +152,88 @@ namespace special{
 	//**************************************************************
 	
 	double softplus(double x)noexcept{
-		if(x>=1.0) return x+logp1(exp(-x));
+		if(x>=0.0) return x+logp1(exp(-x));
 		else return logp1(exp(x));
 	}
 	
 	//**************************************************************
-	//Complementary Error Function - Approximations
+	//Exponential
 	//**************************************************************
 	
-	const double erfa_const::a1[5]={1.0,0.278393,0.230389,0.000972,0.078108};
-	const double erfa_const::a2[5]={0.0,0.3480242,-0.0958798,0.7478556,0.47047};
-	const double erfa_const::a3[7]={1.0,0.0705230784,0.0422820123,0.0092705272,0.0001520143,0.0002765672,0.0000430638};
-	const double erfa_const::a4[7]={0.0,0.254829592,-0.284496736,1.421413741,-1.453152027,1.061405429,0.3275911};
+	/* optimizer friendly implementation of exp2(x).
+	*
+	* strategy:
+	*
+	* split argument into an integer part and a fraction:
+	* ipart = floor(x+0.5);
+	* fpart = x - ipart;
+	*
+	* compute exp2(ipart) from setting the ieee754 exponent
+	* compute exp2(fpart) using a pade' approximation for x in [-0.5;0.5[
+	*
+	* the result becomes: exp2(x) = exp2(ipart) * exp2(fpart)
+	*/
+
+	/* IEEE 754 double precision floating point data manipulation */
+	typedef union {
+		double   f;
+		uint64_t u;
+		struct {int32_t  i0,i1;} s;
+	}  udi_t;
+
+	static const double fm_exp2_q[] = {
+	/*  1.00000000000000000000e0, */
+		2.33184211722314911771e2,
+		4.36821166879210612817e3
+	};
+	static const double fm_exp2_p[] = {
+		2.30933477057345225087e-2,
+		2.02020656693165307700e1,
+		1.51390680115615096133e3
+	};
+
+	/* double precision constants */
+	#define FM_DOUBLE_LOG2OFE  1.4426950408889634074
 	
-	double erfa1(double x){const double s=func::sgn(x); x*=s; x=func::poly<4>(x,erfa_const::a1); x*=x; x*=x; return s*(1.0-1.0/x);}
-	double erfa2(double x){const double s=func::sgn(x); x*=s; return s*(1.0-func::poly<3>(1.0/(1.0+erfa_const::a2[4]*x),erfa_const::a2)*exp(-x*x));}
-	double erfa3(double x){const double s=func::sgn(x); x*=s; x=func::poly<6>(x,erfa_const::a3); x*=x; x*=x; x*=x; x*=x; return s*(1.0-1.0/x);}
-	double erfa4(double x){const double s=func::sgn(x); x*=s; return s*(1.0-func::poly<5>(1.0/(1.0+erfa_const::a4[6]*x),erfa_const::a4)*exp(-x*x));}
+	double exp2_x86(double x){
+	#if defined(__BYTE_ORDER__) && (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)
+		double   ipart, fpart, px, qx;
+		udi_t    epart;
+
+		ipart = floor(x+0.5);
+		fpart = x - ipart;
+		epart.s.i0 = 0;
+		epart.s.i1 = (((int) ipart) + 1023) << 20;
+
+		x = fpart*fpart;
+
+		px =        fm_exp2_p[0];
+		px = px*x + fm_exp2_p[1];
+		qx =    x + fm_exp2_q[0];
+		px = px*x + fm_exp2_p[2];
+		qx = qx*x + fm_exp2_q[1];
+
+		px = px * fpart;
+
+		x = 1.0 + 2.0*(px/(qx-px));
+		return epart.f*x;
+	#else
+		return pow(2.0, x);
+	#endif
+	}
 	
+	double fmexp(double x)
+	{
+	#if defined(__BYTE_ORDER__) && (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)
+	    if (x < -1022.0/FM_DOUBLE_LOG2OFE) return 0;
+	    if (x > 1023.0/FM_DOUBLE_LOG2OFE) return INFINITY;
+	    return exp2_x86(FM_DOUBLE_LOG2OFE * x);
+	#else
+	    return ::exp(x);
+	#endif
+	}
+
+
 	//**************************************************************
 	//Gamma Function
 	//**************************************************************

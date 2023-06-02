@@ -38,6 +38,7 @@ namespace serialize{
 // byte measures
 //**********************************************
 
+template <> int nbytes(const Eigen::Vector3i& obj){return 3*sizeof(int);}
 template <> int nbytes(const Eigen::Vector3d& obj){return 3*sizeof(double);}
 template <> int nbytes(const Eigen::VectorXd& obj){return obj.size()*sizeof(double)+sizeof(int);}
 template <> int nbytes(const Eigen::Matrix3d& obj){return 9*sizeof(double);}
@@ -49,11 +50,18 @@ template <> int nbytes(const std::vector<Eigen::VectorXd>& obj){
 	for(int i=0; i<obj.size(); ++i) size+=nbytes(obj[i]);
 	return size;
 }
+template <> int nbytes(const std::vector<Eigen::MatrixXd>& obj){
+	int size=0;
+	size+=sizeof(int);//length of vector
+	for(int i=0; i<obj.size(); ++i) size+=nbytes(obj[i]);
+	return size;
+}
 
 //**********************************************
 // packing
 //**********************************************
 
+template <> int pack(const Eigen::Vector3i& obj, char* arr){std::memcpy(arr,obj.data(),nbytes(obj));return 3*sizeof(int);}
 template <> int pack(const Eigen::Vector3d& obj, char* arr){std::memcpy(arr,obj.data(),nbytes(obj));return 3*sizeof(double);}
 template <> int pack(const Eigen::VectorXd& obj, char* arr){
 	int pos=0;
@@ -92,11 +100,19 @@ template <> int pack(const std::vector<Eigen::VectorXd>& obj, char* arr){
 	for(int i=0; i<obj.size(); ++i) pos+=pack(obj[i],arr+pos);
 	return pos;
 }
+template <> int pack(const std::vector<Eigen::MatrixXd>& obj, char* arr){
+	int pos=0;
+	const int size=obj.size();
+	std::memcpy(arr+pos,&size,sizeof(int)); pos+=sizeof(int);
+	for(int i=0; i<obj.size(); ++i) pos+=pack(obj[i],arr+pos);
+	return pos;
+}
 
 //**********************************************
 // unpacking
 //**********************************************
 
+template <> int unpack(Eigen::Vector3i& obj, const char* arr){std::memcpy(obj.data(),arr,nbytes(obj));return 3*sizeof(int);}
 template <> int unpack(Eigen::Vector3d& obj, const char* arr){std::memcpy(obj.data(),arr,nbytes(obj));return 3*sizeof(double);}
 template <> int unpack(Eigen::VectorXd& obj, const char* arr){
 	int pos=0,size=0;
@@ -129,6 +145,14 @@ template <> int unpack(std::vector<Eigen::Vector3d>& obj, const char* arr){
 	return pos;
 }
 template <> int unpack(std::vector<Eigen::VectorXd>& obj, const char* arr){
+	int pos=0;
+	int size=0;
+	std::memcpy(&size,arr+pos,sizeof(int)); pos+=sizeof(int);
+	obj.resize(size);
+	for(int i=0; i<size; ++i) pos+=unpack(obj[i],arr+pos);
+	return pos;
+}
+template <> int unpack(std::vector<Eigen::MatrixXd>& obj, const char* arr){
 	int pos=0;
 	int size=0;
 	std::memcpy(&size,arr+pos,sizeof(int)); pos+=sizeof(int);

@@ -14,6 +14,7 @@
 // c++ libraries
 #include <iosfwd>
 #include <vector>
+#include <array>
 // ann - math
 #include "src/math/const.hpp"
 
@@ -26,6 +27,30 @@ namespace math{
 namespace special{
 	
 	static const double prec=1E-8;
+	
+	//**************************************************************
+	// comparison functions
+	//**************************************************************
+	
+	template <class T> inline T max(T x1, T x2)noexcept{return (x1>x2)?x1:x2;}
+	template <class T> inline T min(T x1, T x2)noexcept{return (x1>x2)?x2:x1;}
+	
+	//**************************************************************
+	// modulus functions
+	//**************************************************************
+	
+	template <class T> inline T mod(T n, T z)noexcept{return (n%z+z)%z;}
+	template <> inline int mod<int>(int n, int z)noexcept{return (n%z+z)%z;}
+	template <> inline unsigned int mod<unsigned int>(unsigned int n, unsigned int z)noexcept{return (n%z+z)%z;}
+	template <> inline float mod<float>(float n, float z)noexcept{return fmod(fmod(n,z)+z,z);}
+	template <> inline double mod<double>(double n, double z)noexcept{return fmod(fmod(n,z)+z,z);}
+	template <class T> inline T mod(T n, T lLim, T uLim)noexcept{return mod<T>(n-lLim,uLim-lLim)+lLim;}
+	
+	//**************************************************************
+	// sign function
+	//**************************************************************
+
+	template <typename T> int sgn(T val){return (T(0) < val) - (val < T(0));}
 	
 	//**************************************************************
 	//trig (fdlibm)
@@ -54,7 +79,7 @@ namespace special{
 	double sin(double x)noexcept;
 	
 	//**************************************************************
-	//Hypberbolic Function
+	//Hypberbolic Functions
 	//**************************************************************
 	
 	double sinh(double x);
@@ -63,46 +88,15 @@ namespace special{
 	double csch(double x);
 	double sech(double x);
 	double coth(double x);
+	void tanhsech(double x, double& ftanh, double& fsech);
 	
 	//**************************************************************
-	//Exponential
+	//Power
 	//**************************************************************
 	
-	template <int N> inline double expl(double x)noexcept{
-		x=1.0+x/pow(2.0,N);
-		for(int i=0; i<N; ++i) x*=x;
-		return x;
-	}
-	template <> inline double expl<4>(double x)noexcept{
-		x=1.0+x/16.0;
-		x*=x; x*=x; x*=x; x*=x;
-		return x;
-	};
-	template <> inline double expl<6>(double x)noexcept{
-		x=1.0+x/64.0;
-		x*=x; x*=x; x*=x; x*=x; x*=x; x*=x;
-		return x;
-	};
-	template <> inline double expl<8>(double x)noexcept{
-		x=1.0+x/256.0;
-		x*=x; x*=x; x*=x; x*=x;
-		x*=x; x*=x; x*=x; x*=x;
-		return x;
-	};
-	static union{
-		double d;
-		struct{
-			#ifdef LITTLE_ENDIAN
-				int j,i;
-			#else
-				int i,j;
-			#endif
-		} n;
-	} eco;
-	static const double EXPA=1048576.0/constant::LOG2;
-	static const double EXPB=1072693248.0;
-	static const double EXPC=60801.0;
-	inline double expb(const double x)noexcept{return (eco.n.i=EXPA*x+(EXPB-EXPC),eco.d);};
+	double powint(double x, int p);
+	
+	double sqrta(double x);
 	
 	//**************************************************************
 	//Logarithm
@@ -122,21 +116,9 @@ namespace special{
 	
 	double softplus(double x)noexcept;
 	
-	//**************************************************************
-	//Error Function - Approximations
-	//**************************************************************
-	
-	struct erfa_const{
-		static const double a1[5];
-		static const double a2[5];
-		static const double a3[7];
-		static const double a4[7];
-	};
-	double erfa1(double x);//max error: 5e-4
-	double erfa2(double x);//max error: 2.5e-5
-	double erfa3(double x);//max error: 3e-7
-	double erfa4(double x);//max error: 1.5e-7
-	
+	double exp2_x86(double x);
+	double fmexp(double x);
+
 	//**************************************************************
 	//Gamma Function
 	//**************************************************************

@@ -13,6 +13,7 @@ namespace constant{
 	const double E     =2.718281828459045;//euler's constant
 	const double PHI   =1.618033988749895;//golden ratio
 	const double LOG2  =0.693147180559945;//Log[2,E]
+	const double RAD   =57.295779513082321;//radian (degrees)
 }
 
 }
