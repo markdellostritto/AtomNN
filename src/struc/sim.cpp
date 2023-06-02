@@ -1,8 +1,9 @@
 //c++ libraries
 #include <iostream>
-// ann - print
+// str
 #include "src/str/print.hpp"
-// ann - sim
+#include "src/str/token.hpp"
+// sim
 #include "src/struc/sim.hpp"
 
 //**********************************************************************************************
@@ -10,27 +11,20 @@
 //**********************************************************************************************
 
 std::ostream& operator<<(std::ostream& out, const Interval& i){
-	return out<<i.beg<<":"<<i.end<<":"<<i.stride;
+	return out<<i.beg_<<":"<<i.end_<<":"<<i.stride_;
 }
 
-Interval Interval::read(const char* str){
-	std::vector<std::string> strlist;
-	string::split(str,":",strlist);
-	if(strlist.size()!=2 && strlist.size()!=3) throw std::invalid_argument("Interval::read(const char*): Invalid interval format.");
-	Interval interval;
-	if(string::to_upper(strlist.at(0))=="BEG") interval.beg=1;
-	else interval.beg=std::atoi(strlist.at(0).c_str());
-	if(string::to_upper(strlist.at(1))=="END") interval.end=-1;
-	else interval.end=std::atoi(strlist.at(1).c_str());
-	if(strlist.size()==3){
-		interval.stride=std::atoi(strlist.at(2).c_str());
-	}
+Interval& Interval::read(const char* str, Interval& interval){
+	Token token(str,":");
+	interval.beg()=std::atoi(token.next().c_str());
+	interval.end()=std::atoi(token.next().c_str());
+	if(!token.end()) interval.stride()=std::atoi(token.next().c_str());
+	else interval.stride()=1;
 	return interval;
 }
 
 Interval Interval::split(const Interval& interval, int rank, int nprocs){
-	//const int ts=((interval.end-interval.beg)+1)/interval.stride;
-	const int ts=((interval.end-interval.beg)+1);
+	const int ts=((interval.end()-interval.beg())+1);
 	int ts_loc=ts/nprocs;
 	int beg_loc=ts_loc*(rank)+1;
 	int end_loc=ts_loc*(rank+1);
@@ -42,7 +36,7 @@ Interval Interval::split(const Interval& interval, int rank, int nprocs){
 		beg_loc+=ts%nprocs;
 		end_loc+=ts%nprocs;
 	}
-	Interval newint(beg_loc,end_loc,interval.stride);
+	Interval newint(beg_loc,end_loc,interval.stride());
 	return newint;
 }
 
@@ -59,7 +53,6 @@ std::ostream& operator<<(std::ostream& out, const Simulation& sim){
 	out<<"SIM   = "<<sim.name_<<"\n";
 	out<<"TS    = "<<sim.timestep_<<"\n";
 	out<<"T     = "<<sim.timesteps_<<"\n";
-	out<<"CF    = "<<sim.cell_fixed_<<"\n";
 	out<<"AtomT = "<<sim.atomT_<<"\n";
 	out<<print::title("SIMULATION",str)<<"\n";
 	out<<print::buf(str);
@@ -115,7 +108,6 @@ namespace serialize{
 		size+=sizeof(int);//timesteps_
 		size+=sizeof(int);//natoms
 		size+=sizeof(double);//timestep
-		size+=sizeof(bool);//cell_fixed_
 		size+=nbytes(sim.atomT());//atomT
 		size+=nbytes(sim.name());//name
 		for(int t=0; t<sim.timesteps(); ++t){
@@ -131,9 +123,9 @@ namespace serialize{
 	template <> int pack(const Interval& obj, char* arr){
 		if(SIM_PRINT_FUNC>0) std::cout<<"pack(const Interval&,char*):\n";
 		int pos=0;
-		std::memcpy(arr+pos,&obj.beg,sizeof(int)); pos+=sizeof(int);
-		std::memcpy(arr+pos,&obj.end,sizeof(int)); pos+=sizeof(int);
-		std::memcpy(arr+pos,&obj.stride,sizeof(int)); pos+=sizeof(int);
+		std::memcpy(arr+pos,&obj.beg(),sizeof(int)); pos+=sizeof(int);
+		std::memcpy(arr+pos,&obj.end(),sizeof(int)); pos+=sizeof(int);
+		std::memcpy(arr+pos,&obj.stride(),sizeof(int)); pos+=sizeof(int);
 		return pos;
 	}
 	template <> int pack(const Simulation& sim, char* arr){
@@ -142,7 +134,6 @@ namespace serialize{
 		std::memcpy(arr+pos,&(tmpInt=sim.timesteps()),sizeof(int)); pos+=sizeof(int);
 		std::memcpy(arr+pos,&(tmpInt=sim.frame(0).nAtoms()),sizeof(int)); pos+=sizeof(int);
 		std::memcpy(arr+pos,&sim.timestep(),sizeof(double)); pos+=sizeof(double);
-		std::memcpy(arr+pos,&sim.cell_fixed(),sizeof(bool)); pos+=sizeof(bool);
 		pos+=pack(sim.atomT(),arr);
 		pos+=pack(sim.name(),arr);
 		for(int t=0; t<sim.timesteps(); ++t){
@@ -158,9 +149,9 @@ namespace serialize{
 	template <> int unpack(Interval& obj, const char* arr){
 		if(SIM_PRINT_FUNC>0) std::cout<<"unpack(Interval&,const char*):\n";
 		int pos=0;
-		std::memcpy(&obj.beg,arr+pos,sizeof(int)); pos+=sizeof(int);
-		std::memcpy(&obj.end,arr+pos,sizeof(int)); pos+=sizeof(int);
-		std::memcpy(&obj.stride,arr+pos,sizeof(int)); pos+=sizeof(int);
+		std::memcpy(&obj.beg(),arr+pos,sizeof(int)); pos+=sizeof(int);
+		std::memcpy(&obj.end(),arr+pos,sizeof(int)); pos+=sizeof(int);
+		std::memcpy(&obj.stride(),arr+pos,sizeof(int)); pos+=sizeof(int);
 		return pos;
 	}
 	template <> int unpack(Simulation& sim, const char* arr){
@@ -170,7 +161,6 @@ namespace serialize{
 		std::memcpy(&ts,arr+pos,sizeof(int)); pos+=sizeof(int);
 		std::memcpy(&nAtoms,arr+pos,sizeof(int)); pos+=sizeof(int);
 		std::memcpy(&sim.timestep(),arr+pos,sizeof(double)); pos+=sizeof(double);
-		std::memcpy(&sim.cell_fixed(),arr+pos,sizeof(bool)); pos+=sizeof(bool);
 		pos+=unpack(atomT,arr);
 		pos+=unpack(sim.name(),arr);
 		sim.resize(ts,nAtoms,atomT);

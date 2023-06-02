@@ -11,12 +11,10 @@
 #include <Eigen/Dense>
 // ann - structure
 #include "src/struc/cell.hpp"
-#include "src/struc/thermo.hpp"
+#include "src/struc/state.hpp"
 #include "src/struc/atom_type.hpp"
 // ann - serialize
 #include "src/mem/serialize.hpp"
-// ann - typedef
-#include "src/util/typedef.hpp"
 
 #ifndef STRUC_PRINT_FUNC
 #define STRUC_PRINT_FUNC 0
@@ -29,6 +27,9 @@
 #ifndef STRUC_PRINT_DATA
 #define STRUC_PRINT_DATA 0
 #endif
+
+typedef Eigen::Matrix<double,3,1> Vec3d;
+typedef Eigen::Matrix<double,Eigen::Dynamic,1> VecXd;
 
 //**********************************************************************************************
 //AtomData
@@ -48,11 +49,16 @@ protected:
 	//serial properties
 	std::vector<double>	mass_;//mass
 	std::vector<double>	charge_;//charge
-	std::vector<double>	spin_;//spin
+	std::vector<double> radius_;//radius
+	std::vector<double>	chi_;//chi
+	std::vector<double>	eta_;//eta
+	std::vector<double>	c6_;//c6 - london disperion coefficient
+	std::vector<double>	js_;//js - spin interaction coefficient
 	//vector properties
 	std::vector<Vec3d>	posn_;//position
 	std::vector<Vec3d>	vel_;//velocity
 	std::vector<Vec3d>	force_;//force
+	std::vector<Vec3d>	spin_;//spin
 	//nnp
 	std::vector<VecXd>	symm_;//symmetry function
 public:
@@ -82,8 +88,16 @@ public:
 	const std::vector<double>& mass()const{return mass_;}
 	std::vector<double>& charge(){return charge_;}
 	const std::vector<double>& charge()const{return charge_;}
-	std::vector<double>& spin(){return spin_;}
-	const std::vector<double>& spin()const{return spin_;}
+	std::vector<double>& radius(){return radius_;}
+	const std::vector<double>& radius()const{return radius_;}
+	std::vector<double>& chi(){return chi_;}
+	const std::vector<double>& chi()const{return chi_;}
+	std::vector<double>& eta(){return eta_;}
+	const std::vector<double>& eta()const{return eta_;}
+	std::vector<double>& c6(){return c6_;}
+	const std::vector<double>& c6()const{return c6_;}
+	std::vector<double>& js(){return js_;}
+	const std::vector<double>& js()const{return js_;}
 	//vector properties
 	std::vector<Vec3d>& posn(){return posn_;}
 	const std::vector<Vec3d>& posn()const{return posn_;}
@@ -91,6 +105,8 @@ public:
 	const std::vector<Vec3d>& vel()const{return vel_;}
 	std::vector<Vec3d>& force(){return force_;}
 	const std::vector<Vec3d>& force()const{return force_;}
+	std::vector<Vec3d>& spin(){return spin_;}
+	const std::vector<Vec3d>& spin()const{return spin_;}
 	//nnp
 	std::vector<VecXd>& symm(){return symm_;}
 	const std::vector<VecXd>& symm()const{return symm_;}
@@ -110,8 +126,16 @@ public:
 	const double& mass(int i)const{return mass_[i];}
 	double& charge(int i){return charge_[i];}
 	const double& charge(int i)const{return charge_[i];}
-	double& spin(int i){return spin_[i];}
-	const double& spin(int i)const{return spin_[i];}
+	double& radius(int i){return radius_[i];}
+	const double& radius(int i)const{return radius_[i];}
+	double& chi(int i){return chi_[i];}
+	const double& chi(int i)const{return chi_[i];}
+	double& eta(int i){return eta_[i];}
+	const double& eta(int i)const{return eta_[i];}
+	double& c6(int i){return c6_[i];}
+	const double& c6(int i)const{return c6_[i];}
+	double& js(int i){return js_[i];}
+	const double& js(int i)const{return js_[i];}
 	//vector properties
 	Vec3d& posn(int i){return posn_[i];}
 	const Vec3d& posn(int i)const{return posn_[i];}
@@ -119,6 +143,8 @@ public:
 	const Vec3d& vel(int i)const{return vel_[i];}
 	Vec3d& force(int i){return force_[i];}
 	const Vec3d& force(int i)const{return force_[i];}
+	Vec3d& spin(int i){return spin_[i];}
+	const Vec3d& spin(int i)const{return spin_[i];}
 	//nnp
 	VecXd& symm(int i){return symm_[i];}
 	const VecXd& symm(int i)const{return symm_[i];}
@@ -132,7 +158,7 @@ public:
 //Structure
 //**********************************************************************************************
 
-class Structure: public Cell, public Thermo, public AtomData{
+class Structure: public Cell, public State, public AtomData{
 public:
 	//==== constructors/destructors ====
 	Structure(){}
@@ -148,6 +174,7 @@ public:
 	//==== static functions ====
 	static void write_binary(const Structure& struc, const char* file);
 	static void read_binary(Structure& struc, const char* file);
+	static Structure& super(const Structure& struc, Structure& superc, const Eigen::Vector3i nlat);
 };
 
 //**********************************************************************************************

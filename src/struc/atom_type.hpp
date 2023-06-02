@@ -4,8 +4,10 @@
 
 // c++ libraries
 #include <iosfwd>
-// ann - mem
+// mem
 #include "src/mem/serialize.hpp"
+// str
+#include "src/str/token.hpp"
 
 //**********************************************************************************************
 //AtomType
@@ -23,11 +25,16 @@ struct AtomType{
 	//serial properties
 	bool mass;
 	bool charge;
-	bool spin;
+	bool radius;
+	bool chi;
+	bool eta;
+	bool c6;
+	bool js;
 	//vector properties
 	bool posn;
 	bool vel;
 	bool force;
+	bool spin;
 	//nnp
 	bool symm;
 	//==== constructors/destructors ====
@@ -38,6 +45,7 @@ struct AtomType{
 	//==== member functions ====
 	void defaults();
 	void clear(){defaults();}
+	static AtomType read(Token& token);
 };
 
 //**********************************************************************************************

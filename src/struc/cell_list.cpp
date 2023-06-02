@@ -3,7 +3,7 @@
 // ann - print
 #include "src/str/print.hpp"
 // ann - math
-#include "src/math/func.hpp"
+#include "src/math/special.hpp"
 // ann - structure
 #include "src/struc/structure.hpp"
 // ann - cell list
@@ -28,9 +28,9 @@ std::ostream& operator<<(std::ostream& out, const CellList& c){
 const std::vector<int>& CellList::atoms(int i, int j, int k)const{
 	return atoms_[
 		index(
-			math::func::mod(i,dim_[0]),
-			math::func::mod(j,dim_[1]),
-			math::func::mod(k,dim_[2])
+			math::special::mod(i,dim_[0]),
+			math::special::mod(j,dim_[1]),
+			math::special::mod(k,dim_[2])
 		)
 	];
 }
@@ -38,9 +38,9 @@ const std::vector<int>& CellList::atoms(int i, int j, int k)const{
 const std::vector<int>& CellList::atoms(const Eigen::Vector3i& i)const{
 	return atoms_[
 		index(
-			math::func::mod(i[0],dim_[0]),
-			math::func::mod(i[1],dim_[1]),
-			math::func::mod(i[2],dim_[2])
+			math::special::mod(i[0],dim_[0]),
+			math::special::mod(i[1],dim_[1]),
+			math::special::mod(i[2],dim_[2])
 		)
 	];
 }
@@ -78,9 +78,9 @@ void CellList::compute(double rc, const Structure& struc){
 		//convert to frac coordinates
 		p.noalias()=struc.RInv()*struc.posn(n);
 		//bin the position
-		cell_[n][0]=math::func::mod((int)(p[0]/flen_[0]),dim_[0]);
-		cell_[n][1]=math::func::mod((int)(p[1]/flen_[1]),dim_[1]);
-		cell_[n][2]=math::func::mod((int)(p[2]/flen_[2]),dim_[2]);
+		cell_[n][0]=math::special::mod((int)(p[0]/flen_[0]),dim_[0]);
+		cell_[n][1]=math::special::mod((int)(p[1]/flen_[1]),dim_[1]);
+		cell_[n][2]=math::special::mod((int)(p[2]/flen_[2]),dim_[2]);
 		//add to the cell list
 		atoms_[index(cell_[n][0],cell_[n][1],cell_[n][2])].push_back(n);
 	}

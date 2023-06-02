@@ -21,8 +21,8 @@
 //==== operators ====
 
 std::ostream& operator<<(std::ostream& out, const AtomData& obj){
-	out<<"n_atoms   = "<<obj.nAtoms_<<"\n";
-	out<<"atom_type = "<<obj.atomType_;
+	out<<"natoms = "<<obj.nAtoms_<<"\n";
+	out<<"type   = "<<obj.atomType_;
 	return out;
 }
 
@@ -38,11 +38,16 @@ void AtomData::clear(){
 	//serial properties
 	mass_.clear();
 	charge_.clear();
-	spin_.clear();
+	radius_.clear();
+	chi_.clear();
+	eta_.clear();
+	c6_.clear();
+	js_.clear();
 	//vector properties
 	posn_.clear();
 	vel_.clear();
 	force_.clear();
+	spin_.clear();
 	//nnp
 	symm_.clear();
 }
@@ -64,13 +69,20 @@ void AtomData::resize(int nAtoms, const AtomType& atomT){
 	//serial properties
 	if(atomT.mass)   mass_.resize(nAtoms,0.0);
 	if(atomT.charge) charge_.resize(nAtoms,0.0);
-	if(atomT.spin)   spin_.resize(nAtoms,0.0);
+	if(atomT.radius) radius_.resize(nAtoms,0.0);
+	if(atomT.chi)    chi_.resize(nAtoms,0.0);
+	if(atomT.eta)    eta_.resize(nAtoms,0.0);
+	if(atomT.c6)     c6_.resize(nAtoms,0.0);
+	if(atomT.js)     js_.resize(nAtoms,0.0);
 	//vector properties
 	if(atomT.posn)  posn_.resize(nAtoms,Eigen::Vector3d::Zero());
 	if(atomT.vel)   vel_.resize(nAtoms,Eigen::Vector3d::Zero());
 	if(atomT.force) force_.resize(nAtoms,Eigen::Vector3d::Zero());
+	if(atomT.spin)  spin_.resize(nAtoms,Eigen::Vector3d::Zero());
 	//nnp
 	if(atomT.symm)	symm_.resize(nAtoms);
+	
+	if(atomT.index) for(int i=0; i<nAtoms; ++i) index_[i]=i;
 }
 
 //**********************************************************************************************
@@ -80,9 +92,14 @@ void AtomData::resize(int nAtoms, const AtomType& atomT){
 //==== operators ====
 
 std::ostream& operator<<(std::ostream& out, const Structure& struc){
+	char* str=new char[print::len_buf];
+	out<<print::buf(str)<<"\n";
+	out<<print::title("STRUCTURE",str)<<"\n";
 	out<<static_cast<const AtomData&>(struc)<<"\n";
 	out<<static_cast<const Cell&>(struc)<<"\n";
-	out<<static_cast<const Thermo&>(struc)<<"\n";
+	out<<static_cast<const State&>(struc)<<"\n";
+	out<<print::buf(str);
+	delete[] str;
 	return out;
 }
 
@@ -92,7 +109,7 @@ void Structure::clear(){
 	if(STRUC_PRINT_FUNC>0) std::cout<<"Structure::clear():\n";
 	AtomData::clear();
 	Cell::clear();
-	Thermo::clear();
+	State::clear();
 }
 
 //==== static functions ====
@@ -168,6 +185,55 @@ void Structure::read_binary(Structure& struc, const char* file){
 	if(arr!=NULL) delete[] arr;
 	if(reader!=NULL) fclose(reader);
 	if(error) throw std::runtime_error("Failed to read");
+}
+
+Structure& Structure::super(const Structure& struc, Structure& superc, const Eigen::Vector3i nlat){
+	if(nlat[0]<=0 || nlat[1]<=0 || nlat[2]<=0) throw std::invalid_argument("Invalid lattice.");
+	const int np=nlat.prod();
+	const int nAtomsT=struc.nAtoms()*np;
+	superc.resize(nAtomsT,struc.atomType());
+	//set the atomic properties
+	int c=0;
+	const AtomType& atomT=struc.atomType();
+	for(int i=0; i<nlat[0]; ++i){
+		for(int j=0; j<nlat[1]; ++j){
+			for(int k=0; k<nlat[2]; ++k){
+				const Eigen::Vector3d R=i*struc.R().col(0)+j*struc.R().col(1)+k*struc.R().col(2);
+				for(int n=0; n<struc.nAtoms(); ++n){
+					//set map
+					Eigen::Vector3i index; index<<i,j,k;
+					//basic properties
+					if(atomT.name)		superc.name(c)=struc.name(n);
+					if(atomT.an)		superc.an(c)=struc.an(n);
+					if(atomT.type)		superc.type(c)=struc.type(n);
+					if(atomT.index)	superc.index(c)=struc.index(n);
+					//serial properties
+					if(atomT.mass)		superc.mass(c)=struc.mass(n);
+					if(atomT.charge)	superc.charge(c)=struc.charge(n);
+					if(atomT.radius)	superc.radius(c)=struc.radius(n);
+					if(atomT.chi)		superc.chi(c)=struc.chi(n);
+					if(atomT.eta)		superc.eta(c)=struc.eta(n);
+					if(atomT.c6)		superc.c6(c)=struc.c6(n);
+					if(atomT.js)		superc.js(c)=struc.js(n);
+					//vector properties
+					if(atomT.posn)		superc.posn(c)=struc.posn(n)+R;
+					if(atomT.vel) 		superc.vel(c)=struc.vel(n);
+					if(atomT.force) 	superc.force(c)=struc.force(n);
+					if(atomT.spin) 	superc.spin(c)=struc.spin(n);
+					//nnp
+					if(atomT.symm) 	superc.symm(c)=struc.symm(n);
+					//increment
+					c++;
+				}
+			}
+		}
+	}
+	Eigen::MatrixXd Rnew=struc.R();
+	Rnew.col(0)*=nlat[0];
+	Rnew.col(1)*=nlat[1];
+	Rnew.col(2)*=nlat[2];
+	static_cast<Cell&>(superc).init(Rnew);
+	return superc;
 }
 
 //**********************************************************************************************
@@ -506,20 +572,25 @@ namespace serialize{
 		//number of atoms
 		size+=sizeof(obj.nAtoms());
 		//basic properties
-		if(obj.atomType().name)  size+=nbytes(obj.name());
-		if(obj.atomType().an)    size+=nbytes(obj.an());
-		if(obj.atomType().type)  size+=nbytes(obj.type());
-		if(obj.atomType().index) size+=nbytes(obj.index());
+		if(obj.atomType().name)   size+=nbytes(obj.name());
+		if(obj.atomType().an)     size+=nbytes(obj.an());
+		if(obj.atomType().type)   size+=nbytes(obj.type());
+		if(obj.atomType().index)  size+=nbytes(obj.index());
 		//serial properties
 		if(obj.atomType().mass)   size+=nbytes(obj.mass());
 		if(obj.atomType().charge) size+=nbytes(obj.charge());
-		if(obj.atomType().spin)   size+=nbytes(obj.spin());
+		if(obj.atomType().radius) size+=nbytes(obj.radius());
+		if(obj.atomType().chi)    size+=nbytes(obj.chi());
+		if(obj.atomType().eta)    size+=nbytes(obj.eta());
+		if(obj.atomType().c6)     size+=nbytes(obj.c6());
+		if(obj.atomType().js)     size+=nbytes(obj.js());
 		//vector properties
 		if(obj.atomType().posn)   size+=nbytes(obj.posn());
 		if(obj.atomType().vel)    size+=nbytes(obj.vel());
 		if(obj.atomType().force)  size+=nbytes(obj.force());
+		if(obj.atomType().spin)   size+=nbytes(obj.spin());
 		//nnp
-		if(obj.atomType().symm) size+=nbytes(obj.symm());
+		if(obj.atomType().symm)   size+=nbytes(obj.symm());
 		//return
 		return size;
 	}
@@ -527,7 +598,7 @@ namespace serialize{
 		if(STRUC_PRINT_FUNC>0) std::cout<<"nbytes(const Structure&)\n";
 		int size=0;
 		size+=nbytes(static_cast<const Cell&>(obj));
-		size+=nbytes(static_cast<const Thermo&>(obj));
+		size+=nbytes(static_cast<const State&>(obj));
 		size+=nbytes(static_cast<const AtomData&>(obj));
 		return size;
 	}
@@ -544,20 +615,25 @@ namespace serialize{
 		//natoms
 		std::memcpy(arr+pos,&obj.nAtoms(),sizeof(int)); pos+=sizeof(int);
 		//basic properties
-		if(obj.atomType().name)  pos+=pack(obj.name(),arr+pos);
-		if(obj.atomType().an)    pos+=pack(obj.an(),arr+pos);
-		if(obj.atomType().type)  pos+=pack(obj.type(),arr+pos);
-		if(obj.atomType().index) pos+=pack(obj.index(),arr+pos);
+		if(obj.atomType().name)   pos+=pack(obj.name(),arr+pos);
+		if(obj.atomType().an)     pos+=pack(obj.an(),arr+pos);
+		if(obj.atomType().type)   pos+=pack(obj.type(),arr+pos);
+		if(obj.atomType().index)  pos+=pack(obj.index(),arr+pos);
 		//serial properties
 		if(obj.atomType().mass)   pos+=pack(obj.mass(),arr+pos);
 		if(obj.atomType().charge) pos+=pack(obj.charge(),arr+pos);
-		if(obj.atomType().spin)   pos+=pack(obj.spin(),arr+pos);
+		if(obj.atomType().radius) pos+=pack(obj.radius(),arr+pos);
+		if(obj.atomType().chi)    pos+=pack(obj.chi(),arr+pos);
+		if(obj.atomType().eta)    pos+=pack(obj.eta(),arr+pos);
+		if(obj.atomType().c6)     pos+=pack(obj.c6(),arr+pos);
+		if(obj.atomType().js)     pos+=pack(obj.js(),arr+pos);
 		//vector properties
 		if(obj.atomType().posn)   pos+=pack(obj.posn(),arr+pos);
 		if(obj.atomType().vel)    pos+=pack(obj.vel(),arr+pos);
 		if(obj.atomType().force)  pos+=pack(obj.force(),arr+pos);
+		if(obj.atomType().spin)   pos+=pack(obj.spin(),arr+pos);
 		//nnp
-		if(obj.atomType().symm) pos+=pack(obj.symm(),arr+pos);
+		if(obj.atomType().symm)   pos+=pack(obj.symm(),arr+pos);
 		//return
 		return pos;
 	}
@@ -565,7 +641,7 @@ namespace serialize{
 		if(STRUC_PRINT_FUNC>0) std::cout<<"pack(const Structure&,char*):\n";
 		int pos=0;
 		pos+=pack(static_cast<const Cell&>(obj),arr+pos);
-		pos+=pack(static_cast<const Thermo&>(obj),arr+pos);
+		pos+=pack(static_cast<const State&>(obj),arr+pos);
 		pos+=pack(static_cast<const AtomData&>(obj),arr+pos);
 		return pos;
 	}
@@ -593,11 +669,16 @@ namespace serialize{
 		//serial properties
 		if(obj.atomType().mass)   pos+=unpack(obj.mass(),arr+pos);
 		if(obj.atomType().charge) pos+=unpack(obj.charge(),arr+pos);
-		if(obj.atomType().spin)   pos+=unpack(obj.spin(),arr+pos);
+		if(obj.atomType().radius) pos+=unpack(obj.radius(),arr+pos);
+		if(obj.atomType().chi)    pos+=unpack(obj.chi(),arr+pos);
+		if(obj.atomType().eta)    pos+=unpack(obj.eta(),arr+pos);
+		if(obj.atomType().c6)     pos+=unpack(obj.c6(),arr+pos);
+		if(obj.atomType().js)     pos+=unpack(obj.js(),arr+pos);
 		//vector properties
 		if(obj.atomType().posn)   pos+=unpack(obj.posn(),arr+pos);
 		if(obj.atomType().vel)    pos+=unpack(obj.vel(),arr+pos);
 		if(obj.atomType().force)  pos+=unpack(obj.force(),arr+pos);
+		if(obj.atomType().spin)   pos+=unpack(obj.spin(),arr+pos);
 		//nnp
 		if(obj.atomType().symm) pos+=unpack(obj.symm(),arr+pos);
 		//return
@@ -607,7 +688,7 @@ namespace serialize{
 		if(STRUC_PRINT_FUNC>0) std::cout<<"unpack(Structure&,const char*):\n";
 		int pos=0;
 		pos+=unpack(static_cast<Cell&>(obj),arr+pos);
-		pos+=unpack(static_cast<Thermo&>(obj),arr+pos);
+		pos+=unpack(static_cast<State&>(obj),arr+pos);
 		pos+=unpack(static_cast<AtomData&>(obj),arr+pos);
 		return pos;
 	}

@@ -24,13 +24,30 @@
 //Interval
 //**********************************************************************************************
 
-struct Interval{
-	int beg,end,stride;
-	Interval(int b,int e,int s):beg(b),end(e),stride(s){}
-	Interval():beg(1),end(-1),stride(1){}
+class Interval{
+private:
+	int beg_,end_,stride_;
+public:
+	//==== constructors/destructors ====
+	Interval(int b,int e,int s):beg_(b),end_(e),stride_(s){}
+	Interval():beg_(-1),end_(-1),stride_(-1){}
 	~Interval(){}
+	
+	//==== operators ====
 	friend std::ostream& operator<<(std::ostream& out, const Interval& i);
-	static Interval read(const char* str);
+	
+	//==== access ====
+	int& beg(){return beg_;}
+	const int& beg()const{return beg_;}
+	int& end(){return end_;}
+	const int& end()const{return end_;}
+	int& stride(){return stride_;}
+	const int& stride()const{return stride_;}
+	const int len()const{return end_-beg_+1;}
+	const int nsteps()const{return (end_-beg_+1)/stride_;}
+	
+	//==== member functions ====
+	static Interval& read(const char* str, Interval& interval);
 	static Interval split(const Interval& interval, int rank, int nproc);
 };
 
@@ -43,7 +60,6 @@ private:
 	std::string name_;
 	double timestep_;
 	int timesteps_;
-	bool cell_fixed_;
 	AtomType atomT_;
 	std::vector<Structure> frames_;
 public:
@@ -61,8 +77,6 @@ public:
 	const double& timestep()const{return timestep_;}
 	int& timesteps(){return timesteps_;}
 	const int& timesteps()const{return timesteps_;}
-	bool& cell_fixed(){return cell_fixed_;}
-	const bool& cell_fixed()const{return cell_fixed_;}
 	AtomType& atomT(){return atomT_;}
 	const AtomType& atomT()const{return atomT_;}
 	Structure& frame(int i){return frames_[i];}

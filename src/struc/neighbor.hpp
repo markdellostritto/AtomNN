@@ -1,11 +1,25 @@
+#pragma once
 #ifndef NEIGHBOR_HPP
 #define NEIGHBOR_HPP
 
 //c++ libraries
 #include <iosfwd>
 #include <string>
-// ann - struc
+// struc
 #include "src/struc/structure.hpp"
+
+#ifndef NEIGH_PRINT_FUNC
+#define NEIGH_PRINT_FUNC 0
+#endif
+
+#ifndef NEIGH_PRINT_STATUS
+#define NEIGH_PRINT_STATUS 0
+#endif
+
+#ifndef NEIGH_PRINT_DATA
+#define NEIGH_PRINT_DATA 0
+#endif
+
 
 //**********************************************************************************************
 //Neighbor
@@ -17,9 +31,13 @@ private:
 	double dr_;//norm of r_;
 	int type_;
 	int index_;
+	bool min_;
 public:
-	Neighbor():dr_(0.0),type_(-1),index_(-1),r_(Eigen::Vector3d::Zero()){};
+	Neighbor():dr_(0.0),type_(-1),index_(-1),r_(Eigen::Vector3d::Zero()),min_(false){};
 	~Neighbor(){};
+	
+	//==== operators ====
+	friend std::ostream& operator<<(std::ostream& out, const Neighbor& obj);
 	
 	Eigen::Vector3d& r(){return r_;}
 	const Eigen::Vector3d& r()const{return r_;}
@@ -29,6 +47,8 @@ public:
 	const int& type()const{return type_;}
 	int& index(){return index_;}
 	const int& index()const{return index_;}
+	bool& min(){return min_;}
+	const bool& min()const{return min_;}
 	
 	void clear();
 };
@@ -39,6 +59,7 @@ public:
 
 class NeighborList{
 private:
+	int period_;
 	double rc_;
 	std::vector<std::vector<Neighbor> > neigh_;
 public:
@@ -51,6 +72,8 @@ public:
 	friend std::ostream& operator<<(std::ostream& out, const NeighborList& obj);
 	
 	//==== access ====
+	int& period(){return period_;}
+	const int& period()const{return period_;}
 	double& rc(){return rc_;}
 	const double& rc()const{return rc_;}
 	int size(int i)const{return neigh_[i].size();}
@@ -60,9 +83,17 @@ public:
 	//==== member functions ====
 	void read(const char* str);
 	void build(const Structure& struc, double rc);
+	void build(const Structure& struc, double rc, int ii);
+	void build(const Structure& struc, double rc, const std::vector<int>& subset);
 	void build(const Structure& struc){build(struc,rc_);}
+	void build(const Structure& struc, int ii){build(struc,rc_,ii);}
+	void build(const Structure& struc, const std::vector<int>& subset){build(struc,rc_,subset);}
 	void clear();
 	void defaults(){clear();}
+	
+	static std::vector<Eigen::Vector3d>& ilist(const Structure& struc, double rc, std::vector<Eigen::Vector3d>& Rlist);
+	
+	static bool sortcmp(const Eigen::Vector3d& i, const Eigen::Vector3d& j);
 };
 
 //**********************************************************************************************
@@ -76,18 +107,21 @@ namespace serialize{
 	//**********************************************
 	
 	template <> int nbytes(const Neighbor& obj);
+	template <> int nbytes(const NeighborList& obj);
 	
 	//**********************************************
 	// packing
 	//**********************************************
 	
 	template <> int pack(const Neighbor& obj, char* arr);
+	template <> int pack(const NeighborList& obj, char* arr);
 	
 	//**********************************************
 	// unpacking
 	//**********************************************
 	
 	template <> int unpack(Neighbor& obj, const char* arr);
+	template <> int unpack(NeighborList& obj, const char* arr);
 	
 }
 
