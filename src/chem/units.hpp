@@ -90,6 +90,7 @@ namespace units{
 		static const double hbar;//reduced Planck's constant
 		static const double ke;//Coulomb's constant
 		static const double kb;//Boltzmann's constant
+		static const double mub;//bohr magneton
 	};
 	
 	struct metal{
@@ -105,6 +106,7 @@ namespace units{
 		static const double hbar;//reduced Planck's constant
 		static const double ke;//Coulomb's constant
 		static const double kb;//Boltzmann's constant
+		static const double mub;//bohr magneton
 	};
 	
 	struct lj{
@@ -120,6 +122,7 @@ namespace units{
 		static const double hbar;//reduced Planck's constant
 		static const double ke;//Coulomb's constant
 		static const double kb;//Boltzmann's constant
+		static const double mub;//bohr magneton
 	};
 	
 	class consts{
@@ -137,6 +140,7 @@ namespace units{
 		static double hbar_;//reduced Planck's constant
 		static double ke_;//Coulomb's constant
 		static double kb_;//Boltzmann's constant
+		static double mub_;//bohr magneton
 	public:
 		consts(){init(System::METAL);}
 		consts(const System& t){init(t);}

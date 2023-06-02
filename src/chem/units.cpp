@@ -21,7 +21,7 @@ System System::read(const char* str){
 	else return System::UNKNOWN;
 }
 
-const char* name(System& t){
+const char* System::name(const System& t){
 	switch(t){
 		case System::AU: return "AU";
 		case System::METAL: return "METAL";
@@ -92,6 +92,7 @@ const double au::qe=1.0;
 const double au::hbar=1.0;
 const double au::ke=1.0;
 const double au::kb=metal::kb/EVpHARTREE;
+const double au::mub=0.5;
 
 //"metal units"
 const Time::type metal::time=Time::FEMTOSECONDS;
@@ -103,9 +104,10 @@ const double metal::mu0=0.0;
 const double metal::me=5.48579909065e-4;//NIST - Jan. 16 2020
 const double metal::mp=1.007276466621;//NIST - Jan. 16 2020
 const double metal::qe=1.0;
-const double metal::hbar=6.582119569e-16;//NIST - Jan. 16 2020
+const double metal::hbar=6.582119569e-1;//NIST - Jan. 16 2020 (eV*fs)
 const double metal::ke=ANGpBOHR*EVpHARTREE;
 const double metal::kb=8.617333262e-5;//NIST - Jan. 16 2020
+const double metal::mub=5.788381801226e-5;
 
 //"lj units"
 const Time::type lj::time=Time::LJ;
@@ -120,6 +122,7 @@ const double lj::qe=1.0;
 const double lj::hbar=0.0;
 const double lj::ke=1.0;
 const double lj::kb=1.0;
+const double lj::mub=1.0;
 
 //consts
 System consts::system_=System::METAL;
@@ -135,6 +138,7 @@ double consts::qe_=0.0;
 double consts::hbar_=0.0;
 double consts::ke_=0.0;
 double consts::kb_=0.0;
+double consts::mub_=0.0;
 
 void consts::init(const System& t){
 	if(t==System::AU){
@@ -150,6 +154,7 @@ void consts::init(const System& t){
 		hbar_=au::hbar;
 		ke_=au::ke;
 		kb_=au::kb;
+		mub_=au::mub;
 	} else if(t==System::METAL){
 		time_=metal::time;
 		dist_=metal::dist;
@@ -163,6 +168,7 @@ void consts::init(const System& t){
 		hbar_=metal::hbar;
 		ke_=metal::ke;
 		kb_=metal::kb;
+		mub_=metal::mub;
 	} else if(t==System::LJ){
 		time_=lj::time;
 		dist_=lj::dist;
@@ -176,7 +182,8 @@ void consts::init(const System& t){
 		hbar_=lj::hbar;
 		ke_=lj::ke;
 		kb_=lj::kb;
-	} else throw std::invalid_argument("Invalid unit System.");
+		mub_=lj::mub;
+	} else throw std::invalid_argument("units::consts::init(const System&): Invalid unit System.");
 	system_=t;
 }
 
