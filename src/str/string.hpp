@@ -14,7 +14,9 @@ namespace string{
 	
 	static const int M=250;
 	static const char* WS=" \r\t\n";
+	static const char* WSC=" \r\t\n#";
 	static const char* DIGITS="1234567890";
+	static const char* DIGITSC="1234567890#";
 	const char* const COMMENT="#";
 	
 	//******************************************************
