@@ -7,8 +7,6 @@
 #include <iostream>
 // ann - structure
 #include "src/struc/structure.hpp"
-// ann - math
-#include "src/math/func.hpp"
 // ann - strings
 #include "src/str/string.hpp"
 // ann - chem
@@ -55,7 +53,6 @@ void read(const char* xyzfile, const AtomType& atomT, Structure& struc){
 		if(units::consts::system()==units::System::AU){
 			s_len=units::BOHRpANG;
 			s_energy=units::HARTREEpEV;
-			
 		} else if(units::consts::system()==units::System::METAL){
 			s_len=1.0;
 			s_energy=1.0;
@@ -102,6 +99,11 @@ void read(const char* xyzfile, const AtomType& atomT, Structure& struc){
 		if(struc.atomType().posn) struc.posn(i).noalias()=posn*s_len;
 	}
 	
+	//close the file
+	if(XYZ_PRINT_STATUS>0) std::cout<<"closing file\n";
+	fclose(reader);
+	reader=NULL;
+	
 	//set the cell
 	if(XYZ_PRINT_STATUS>0) std::cout<<"setting cell\n";
 	if(lv.norm()>0) static_cast<Cell&>(struc).init(lv);
@@ -110,10 +112,36 @@ void read(const char* xyzfile, const AtomType& atomT, Structure& struc){
 	if(XYZ_PRINT_STATUS>0) std::cout<<"setting energy\n";
 	struc.energy()=s_energy*energy;
 	
-	//close the file
-	if(XYZ_PRINT_STATUS>0) std::cout<<"closing file\n";
-	fclose(reader);
-	reader=NULL;
+	//set an
+	if(atomT.an && atomT.name){
+		for(int i=0; i<nAtoms; ++i){
+			struc.an(i)=ptable::an(struc.name(i).c_str());
+		}
+	}
+	
+	//set mass
+	if(atomT.an && atomT.mass){
+		for(int i=0; i<nAtoms; ++i){
+			struc.mass(i)=ptable::mass(struc.an(i));
+		}
+	} else if(atomT.name && atomT.mass){
+		for(int i=0; i<nAtoms; ++i){
+			const int an=ptable::an(struc.name(i).c_str());
+			struc.mass(i)=ptable::mass(an);
+		}
+	}
+	
+	//set radius
+	if(atomT.an && atomT.radius){
+		for(int i=0; i<nAtoms; ++i){
+			struc.radius(i)=ptable::radius_covalent(struc.an(i));
+		}
+	} else if(atomT.name && atomT.radius){
+		for(int i=0; i<nAtoms; ++i){
+			const int an=ptable::an(struc.name(i).c_str());
+			struc.radius(i)=ptable::radius_covalent(an);
+		}
+	}
 	
 	//free memory
 	delete[] input;
@@ -138,7 +166,7 @@ void write(const char* file, const AtomType& atomT, const Structure& struc){
 	fprintf(writer,"%i\n",struc.nAtoms());
 	fprintf(writer,"SIMULATION %f\n",struc.energy());
 	for(int i=0; i<struc.nAtoms(); ++i){
-		fprintf(writer,"%s %f %f %f\n",struc.name(i).c_str(),
+		fprintf(writer,"%-2s %19.10f %19.10f %19.10f\n",struc.name(i).c_str(),
 			struc.posn(i)[0],struc.posn(i)[1],struc.posn(i)[2]
 		);
 	}

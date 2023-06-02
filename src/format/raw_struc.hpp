@@ -1,28 +1,33 @@
 #pragma once
-#ifndef XYZ_STRUC_HPP
-#define XYZ_STRUC_HPP
+#ifndef RAW_STRUC_HPP
+#define RAW_STRUC_HPP
 
 // eigen libraries
 #include <Eigen/Dense>
-// format
-#include "src/format/xyz.hpp"
 // structure
 #include "src/struc/structure_fwd.hpp"
 
-namespace XYZ{
+#ifndef RAW_PRINT_FUNC
+#define RAW_PRINT_FUNC 0
+#endif
+
+#ifndef RAW_PRINT_STATUS
+#define RAW_PRINT_STATUS 0
+#endif
+
+#ifndef RAW_PRINT_DATA
+#define RAW_PRINT_DATA 0
+#endif
+
+namespace RAW{
 	
 //*****************************************************
 //FORMAT struct
 //*****************************************************
 
 struct Format{
-	std::string xyz;//xyz
 	static Format& read(const std::vector<std::string>& strlist, Format& format);
 };
-
-//unwrapping
-
-void unwrap(Structure& struc);
 
 //*****************************************************
 //reading

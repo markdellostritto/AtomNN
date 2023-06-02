@@ -1,40 +1,43 @@
 #pragma once
-#ifndef XYZ_STRUC_HPP
-#define XYZ_STRUC_HPP
+#ifndef CP2K_SIM_HPP
+#define CP2K_SIM_HPP
 
 // eigen libraries
 #include <Eigen/Dense>
 // format
-#include "src/format/xyz.hpp"
+#include "src/format/cp2k.hpp"
 // structure
-#include "src/struc/structure_fwd.hpp"
+#include "src/struc/sim.hpp"
 
-namespace XYZ{
-	
+#ifndef __cplusplus
+	#error A C++ compiler is required
+#endif
+
+namespace CP2K{
+
 //*****************************************************
 //FORMAT struct
 //*****************************************************
 
 struct Format{
+	std::string fxyz;//fxyz
 	std::string xyz;//xyz
+	std::string input;//input
 	static Format& read(const std::vector<std::string>& strlist, Format& format);
 };
-
-//unwrapping
-
-void unwrap(Structure& struc);
 
 //*****************************************************
 //reading
 //*****************************************************
 
-void read(const char* file, const AtomType& atomT, Structure& struc);
+Simulation& read(const Format& format, const Interval& interval, const AtomType& atomT, Simulation& sim);
 
 //*****************************************************
 //writing
 //*****************************************************
 
-void write(const char* file, const AtomType& atomT, const Structure& struc);
+//const Simulation& write(const Format& format, const Interval& interval, const AtomType& atomT, const Simulation& sim);
+
 
 }
 

@@ -16,6 +16,7 @@ FILE_FORMAT::type FILE_FORMAT::read(const char* str){
 	else if(std::strcmp(str,"LAMMPS")==0) return FILE_FORMAT::LAMMPS;
 	else if(std::strcmp(str,"QE")==0) return FILE_FORMAT::QE;
 	else if(std::strcmp(str,"AME")==0) return FILE_FORMAT::AME;
+	else if(std::strcmp(str,"RAW")==0) return FILE_FORMAT::RAW;
 	else if(std::strcmp(str,"BINARY")==0) return FILE_FORMAT::BINARY;
 	else return FILE_FORMAT::UNKNOWN;
 }
@@ -31,6 +32,7 @@ static const char* name(const FILE_FORMAT::type& format){
 		case FILE_FORMAT::LAMMPS: return "LAMMPS";
 		case FILE_FORMAT::QE: return "QE";
 		case FILE_FORMAT::AME: return "AME";
+		case FILE_FORMAT::RAW: return "RAW";
 		case FILE_FORMAT::BINARY: return "BINARY";
 		default: return "UNKNOWN";
 	}
@@ -47,6 +49,7 @@ std::ostream& operator<<(std::ostream& out, FILE_FORMAT::type& format){
 		case FILE_FORMAT::LAMMPS: out<<"LAMMPS"; break;
 		case FILE_FORMAT::QE: out<<"QE"; break;
 		case FILE_FORMAT::AME: out<<"AME"; break;
+		case FILE_FORMAT::RAW: out<<"RAW"; break;
 		case FILE_FORMAT::BINARY: out<<"BINARY"; break;
 		default: out<<"UNKNOWN"; break;
 	}

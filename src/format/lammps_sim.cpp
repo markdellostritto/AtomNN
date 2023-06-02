@@ -2,58 +2,16 @@
 #include <ctime>
 // c++ libraries
 #include <iostream>
-// ann_v0 - text
+// str
 #include "src/str/string.hpp"
-// ann_v0 - chem
+#include "src/str/token.hpp"
+// chem
 #include "src/chem/ptable.hpp"
 #include "src/chem/units.hpp"
-// ann_v0 - structure
+// structure
 #include "src/format/lammps_sim.hpp"
 
 namespace LAMMPS{
-
-//*****************************************************
-//STYLE_ATOM struct
-//*****************************************************
-
-STYLE_ATOM::type STYLE_ATOM::read(const char* str){
-	if(std::strcmp(str,"FULL")==0) return STYLE_ATOM::FULL;
-	else if(std::strcmp(str,"BOND")==0) return STYLE_ATOM::BOND;
-	else if(std::strcmp(str,"ATOMIC")==0) return STYLE_ATOM::ATOMIC;
-	else if(std::strcmp(str,"CHARGE")==0) return STYLE_ATOM::CHARGE;
-	else return STYLE_ATOM::UNKNOWN;
-}
-
-std::ostream& operator<<(std::ostream& out, STYLE_ATOM::type& t){
-	if(t==STYLE_ATOM::FULL) out<<"FULL";
-	else if(t==STYLE_ATOM::BOND) out<<"BOND";
-	else if(t==STYLE_ATOM::ATOMIC) out<<"ATOMIC";
-	else if(t==STYLE_ATOM::CHARGE) out<<"CHARGE";
-	else out<<"UNKNOWN";
-	return out;
-}
-
-//*****************************************************
-//FORMAT_ATOM struct
-//*****************************************************
-
-std::ostream& operator<<(std::ostream& out, FORMAT_ATOM& f){
-	out<<"index = "<<f.index<<"\n";
-	out<<"mol   = "<<f.mol<<"\n";
-	out<<"type  = "<<f.type<<"\n";
-	out<<"x     = "<<f.x<<"\n";
-	out<<"y     = "<<f.y<<"\n";
-	out<<"z     = "<<f.z<<"\n";
-	out<<"q     = "<<f.q<<"\n";
-	out<<"fx    = "<<f.fx<<"\n";
-	out<<"fy    = "<<f.fy<<"\n";
-	out<<"fz    = "<<f.fz;
-	return out;
-}
-
-//*****************************************************
-//DUMP files
-//*****************************************************
 
 namespace DUMP{
 
@@ -73,6 +31,7 @@ void read(const char* file, const Interval& interval, const AtomType& atomT, Sim
 		int natoms=0;
 		DATA_ATOM dataAtom;
 		FORMAT_ATOM formatAtom;
+		int minindex=-1;
 	//==== timing ====
 		clock_t start,stop;
 		double time;
@@ -135,12 +94,43 @@ void read(const char* file, const Interval& interval, const AtomType& atomT, Sim
 				break;
 			}
 		}
+		
+		//==== find the min index ===
+		while(fgets(input,string::M,reader)!=NULL){
+			if(std::strstr(input,"ITEM: ATOMS")!=NULL){
+				minindex=natoms;
+				for(int i=0; i<1; ++i){
+					//read in the next line
+					fgets(input,string::M,reader);
+					//split the line into tokens
+					std::vector<std::string> tokens;
+					string::split(input,string::WS,tokens);
+					//find index
+					int index=-1;
+					if(formatAtom.index>=0) index=std::atoi(tokens[formatAtom.index].c_str())-1;
+					minindex=index;
+				}
+				for(int i=1; i<natoms; ++i){
+					//read in the next line
+					fgets(input,string::M,reader);
+					//split the line into tokens
+					std::vector<std::string> tokens;
+					string::split(input,string::WS,tokens);
+					//find index
+					int index=-1;
+					if(formatAtom.index>=0) index=std::atoi(tokens[formatAtom.index].c_str())-1;
+					if(index<minindex) minindex=index;
+				}
+				break;
+			}
+		}
+		
 		std::rewind(reader);
 		
 		//==== set the timesteps ====
-		int beg=interval.beg-1;
-		int end=interval.end-1;
-		if(interval.end<0) end=ts+interval.end;
+		int beg=interval.beg()-1;
+		int end=interval.end()-1;
+		if(interval.end()<0) end=ts+interval.end();
 		if(beg>=ts) throw std::runtime_error("Invalid beginning timestep");
 		if(end>=ts) throw std::runtime_error("Invalid ending timestep");
 		const int tsint=end-beg+1;
@@ -152,7 +142,7 @@ void read(const char* file, const Interval& interval, const AtomType& atomT, Sim
 		
 		//==== resize the simulation ====
 		if(LAMMPS_PRINT_STATUS>0) std::cout<<"allocating memory\n";
-		sim.resize(tsint/interval.stride,natoms,atomT);
+		sim.resize(tsint/interval.stride(),natoms,atomT);
 		
 		//==== read atoms ====
 		if(LAMMPS_PRINT_STATUS>0) std::cout<<"reading atoms\n";
@@ -161,29 +151,29 @@ void read(const char* file, const Interval& interval, const AtomType& atomT, Sim
 			if(std::strstr(input,"BOX")!=NULL){
 				//check timestep
 				if(timestep<beg){continue;}
-				if(timestep%interval.stride!=0){continue;}
+				if(timestep%interval.stride()!=0){continue;}
 				if(LAMMPS_PRINT_DATA>1) std::cout<<"Cell: "<<timestep<<"\n";
 				//local variables
-				std::vector<std::string> strlist;
+				Token token;
 				lv.setZero();
 				//x
-				string::split(fgets(input,string::M,reader),string::WS,strlist);
-				const double xlob=std::atof(strlist[0].c_str());//xlo
-				const double xhib=std::atof(strlist[1].c_str());//xhi
+				token.read(fgets(input,string::M,reader),string::WS);
+				const double xlob=std::atof(token.next().c_str());//xlo
+				const double xhib=std::atof(token.next().c_str());//xhi
 				double xy=0;
-				if(strlist.size()==3) xy=std::atof(strlist[2].c_str());//xy
+				if(!token.end()) xy=std::atof(token.next().c_str());//xy
 				//y
-				string::split(fgets(input,string::M,reader),string::WS,strlist);
-				const double ylob=std::atof(strlist[0].c_str());//ylo
-				const double yhib=std::atof(strlist[1].c_str());//yhi
+				token.read(fgets(input,string::M,reader),string::WS);
+				const double ylob=std::atof(token.next().c_str());//ylo
+				const double yhib=std::atof(token.next().c_str());//yhi
 				double xz=0;
-				if(strlist.size()==3) xz=std::atof(strlist[2].c_str());//xz
+				if(!token.end()) xz=std::atof(token.next().c_str());//xz
 				//z
-				string::split(fgets(input,string::M,reader),string::WS,strlist);
-				const double zlob=std::atof(strlist[0].c_str());//zlo
-				const double zhib=std::atof(strlist[1].c_str());//zhi
+				token.read(fgets(input,string::M,reader),string::WS);
+				const double zlob=std::atof(token.next().c_str());//zlo
+				const double zhib=std::atof(token.next().c_str());//zhi
 				double yz=0;
-				if(strlist.size()==3) yz=std::atof(strlist[2].c_str());//yz
+				if(!token.end()) yz=std::atof(token.next().c_str());//yz
 				//set xlo,xhi,ylo,yhi,zlo,zhi
 				const double xlo=xlob-std::min(0.0,std::min(xy,std::min(xz,xy+xz)));
 				const double xhi=xhib-std::max(0.0,std::max(xy,std::max(xz,xy+xz)));
@@ -199,13 +189,13 @@ void read(const char* file, const Interval& interval, const AtomType& atomT, Sim
 				lv(0,2)=xz;
 				lv(1,2)=yz;
 				//set cell
-				static_cast<Cell&>(sim.frame(timestep/interval.stride-beg)).init(lv*s_len);
+				static_cast<Cell&>(sim.frame(timestep/interval.stride()-beg)).init(lv*s_len);
 			}
 			if(std::strstr(input,"ITEM: ATOMS")!=NULL){
 				if(LAMMPS_PRINT_DATA>1) std::cout<<"Atoms: "<<timestep<<"\n";
 				if(timestep<beg){++timestep; continue;}
-				if(timestep%interval.stride!=0){++timestep; continue;}
-				const int lts=timestep/interval.stride-beg;//local time step
+				if(timestep%interval.stride()!=0){++timestep; continue;}
+				const int lts=timestep/interval.stride()-beg;//local time step
 				std::vector<std::string> tokens;
 				for(int i=0; i<natoms; ++i){
 					//read in the next line
@@ -214,7 +204,7 @@ void read(const char* file, const Interval& interval, const AtomType& atomT, Sim
 					string::split(input,string::WS,tokens);
 					//read in the data
 					if(formatAtom.q>=0) dataAtom.q=std::atof(tokens[formatAtom.q].c_str());
-					if(formatAtom.m>=0) dataAtom.q=std::atof(tokens[formatAtom.m].c_str());
+					if(formatAtom.m>=0) dataAtom.m=std::atof(tokens[formatAtom.m].c_str());
 					if(formatAtom.x>=0) dataAtom.posn[0]=std::atof(tokens[formatAtom.x].c_str());
 					if(formatAtom.y>=0) dataAtom.posn[1]=std::atof(tokens[formatAtom.y].c_str());
 					if(formatAtom.z>=0) dataAtom.posn[2]=std::atof(tokens[formatAtom.z].c_str());
@@ -227,24 +217,19 @@ void read(const char* file, const Interval& interval, const AtomType& atomT, Sim
 					if(formatAtom.index>=0) dataAtom.index=std::atoi(tokens[formatAtom.index].c_str())-1;
 					if(formatAtom.type>=0) dataAtom.type=std::atoi(tokens[formatAtom.type].c_str());
 					//set the simulation data
-					if(atomT.type) sim.frame(lts).type(dataAtom.index)=dataAtom.type;
-					if(atomT.index) sim.frame(lts).index(dataAtom.index)=dataAtom.index;
-					if(atomT.posn) sim.frame(lts).posn(dataAtom.index)=dataAtom.posn*s_len;
-					if(atomT.charge) sim.frame(lts).charge(dataAtom.index)=dataAtom.q;
-					if(atomT.mass) sim.frame(lts).mass(dataAtom.index)=dataAtom.m;
-					if(atomT.vel) sim.frame(lts).vel(dataAtom.index)=dataAtom.vel*s_len;
-					if(atomT.force) sim.frame(lts).force(dataAtom.index)=dataAtom.force*s_energy/s_len;
-					if(atomT.name) sim.frame(lts).name(dataAtom.index)=std::string("X")+std::to_string(dataAtom.type);
+					const int index=dataAtom.index-minindex;
+					if(atomT.type) sim.frame(lts).type(index)=dataAtom.type;
+					if(atomT.index) sim.frame(lts).index(index)=dataAtom.index;
+					if(atomT.posn) sim.frame(lts).posn(index)=dataAtom.posn*s_len;
+					if(atomT.charge) sim.frame(lts).charge(index)=dataAtom.q;
+					if(atomT.mass) sim.frame(lts).mass(index)=dataAtom.m;
+					if(atomT.vel) sim.frame(lts).vel(index)=dataAtom.vel*s_len;
+					if(atomT.force) sim.frame(lts).force(index)=dataAtom.force*s_energy/s_len;
+					if(atomT.name) sim.frame(lts).name(index)=std::string("X")+std::to_string(dataAtom.type);
 				}
 				++timestep;
 			}
 			if(timestep>end) break;
-		}
-		
-		//==== check if the cell is fixed ====
-		sim.cell_fixed()=true;
-		for(int t=1; t<sim.timesteps(); ++t){
-			if(static_cast<Cell&>(sim.frame(t))!=static_cast<Cell&>(sim.frame(0))){sim.cell_fixed()=false;break;}
 		}
 		
 		//==== move the atoms within the cell ====
@@ -274,7 +259,7 @@ void read(const char* file, const Interval& interval, const AtomType& atomT, Sim
 	if(error) throw std::runtime_error("I/O Exception Occurred.");
 }
 
-void write(const char* file, const Interval& interval, const AtomType& atomT, Simulation& sim){
+void write(const char* file, const Interval& interval, const AtomType& atomT, const Simulation& sim){
 	static const char* funcName="write<AtomT>(const char*,const Interval&,const AtomType&,Simulation&)";
 	if(LAMMPS_PRINT_FUNC>0) std::cout<<NAMESPACE_GLOBAL<<"::"<<funcName<<":\n";
 	//local variables
@@ -287,9 +272,9 @@ void write(const char* file, const Interval& interval, const AtomType& atomT, Si
 		if(writer==NULL) throw std::runtime_error("Unable to open file.");
 		
 		//set the beginning and ending timesteps
-		int lbeg=interval.beg-1;
-		int lend=interval.end-1;
-		if(lend<0) lend=sim.timesteps()+interval.end;
+		int lbeg=interval.beg()-1;
+		int lend=interval.end()-1;
+		if(lend<0) lend=sim.timesteps()+interval.end();
 		if(lbeg<0 || lend>sim.timesteps() || lbeg>lend) throw std::invalid_argument("Invalid beginning and ending timesteps.");
 		if(LAMMPS_PRINT_DATA>0) std::cout<<"Interval = ("<<lbeg<<","<<lend<<")\n";
 		
@@ -299,9 +284,24 @@ void write(const char* file, const Interval& interval, const AtomType& atomT, Si
 			fprintf(writer,"ITEM: NUMBER OF ATOMS\n");
 			fprintf(writer,"%i\n",sim.frame(t).nAtoms());
 			fprintf(writer,"ITEM: BOX BOUNDS pp pp pp\n");
-			fprintf(writer,"%f %f\n",0.0,sim.frame(t).R()(0,0));
-			fprintf(writer,"%f %f\n",0.0,sim.frame(t).R()(1,1));
-			fprintf(writer,"%f %f\n",0.0,sim.frame(t).R()(2,2));
+			const Eigen::Vector3d ra=sim.frame(t).R().col(0);
+			const Eigen::Vector3d rb=sim.frame(t).R().col(1);
+			const Eigen::Vector3d rc=sim.frame(t).R().col(2);
+			const double A=ra.norm();
+			const double B=rb.norm();
+			const double C=rc.norm();
+			const double cosA=rb.dot(rc)/(B*C);
+			const double cosB=ra.dot(rc)/(A*C);
+			const double cosC=ra.dot(rb)/(A*B);
+			const double lx=A;
+			const double xy=B*cosC;
+			const double xz=C*cosB;
+			const double ly=sqrt(B*B-xy*xy);
+			const double yz=(B*C*cosA-xy*xz)/ly;
+			const double lz=sqrt(C*C-xz*xz-yz*yz);
+			fprintf(writer,"%f %f %f\n",0.0,lx,xy);
+			fprintf(writer,"%f %f %f\n",0.0,ly,xz);
+			fprintf(writer,"%f %f %f\n",0.0,lz,yz);
 			fprintf(writer,"ITEM: ATOMS id type x y z\n");
 			for(int n=0; n<sim.frame(t).nAtoms(); ++n){
 				fprintf(writer,"%i %i %f %f %f\n",n+1,sim.frame(t).type(n),

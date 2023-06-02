@@ -1,23 +1,22 @@
 #pragma once
-#ifndef LAMMPS_SIM_HPP
-#define LAMMPS_SIM_HPP
+#ifndef XYZ_SIM_HPP
+#define XYZ_SIM_HPP
 
-// c++ libraries
-#include <vector>
-#include <map>
+// eigen libraries
+#include <Eigen/Dense>
 //format
-#include "src/format/lammps.hpp"
+#include "src/format/xyz.hpp"
 // structure
 #include "src/struc/sim.hpp"
 
-namespace LAMMPS{
+namespace XYZ{
+	
+//unwrapping
 
-namespace DUMP{
+void unwrap(Structure& struc);
 
 void read(const char* file, const Interval& interval, const AtomType& atomT, Simulation& sim);
 void write(const char* file, const Interval& interval, const AtomType& atomT, const Simulation& sim);
-
-}
 
 }
 

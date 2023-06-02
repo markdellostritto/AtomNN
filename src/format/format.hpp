@@ -20,6 +20,7 @@ struct FILE_FORMAT{
 		LAMMPS,//LAMMPS input,data,dump files
 		QE,//quantum espresso output files
 		AME,//ann format
+		RAW,
 		BINARY
 	};
 	static FILE_FORMAT::type read(const char* str);

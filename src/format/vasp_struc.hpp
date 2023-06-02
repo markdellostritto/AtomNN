@@ -5,24 +5,13 @@
 // c++ libraries
 #include <vector>
 #include <string>
-// ann - structure
+// format
+#include "src/format/vasp.hpp"
+// structure
 #include "src/format/format.hpp"
 #include "src/struc/structure_fwd.hpp"
 
-#ifndef DEBUG_VASP
-#define DEBUG_VASP 0
-#endif
-
-#ifndef __cplusplus
-	#error A C++ compiler is required
-#endif
-
 namespace VASP{
-
-//static variables
-static const int HEADER_SIZE=7;//number of lines in the header before the atomic positions
-static const char* NAMESPACE_GLOBAL="VASP";
-
 
 //*****************************************************
 //FORMAT struct

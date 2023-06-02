@@ -30,8 +30,8 @@ namespace AME{
 //*****************************************************
 
 struct FORMAT_ATOM{
-	int name,rx,ry,rz,fx,fy,fz,vx,vy,vz,q,m;
-	FORMAT_ATOM():name(-1),rx(-1),ry(-1),rz(-1),fx(-1),fy(-1),fz(-1),vx(-1),vy(-1),vz(-1),q(-1),m(-1){};
+	int name,rx,ry,rz,fx,fy,fz,vx,vy,vz,q,m,c6;
+	FORMAT_ATOM():name(-1),rx(-1),ry(-1),rz(-1),fx(-1),fy(-1),fz(-1),vx(-1),vy(-1),vz(-1),q(-1),m(-1),c6(-1){};
 };
 
 //*****************************************************

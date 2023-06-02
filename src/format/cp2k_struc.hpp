@@ -1,23 +1,13 @@
 #pragma once
-#ifndef CP2K_HPP
-#define CP2K_HPP
+#ifndef CP2K_STRUC_HPP
+#define CP2K_STRUC_HPP
 
 // eigen libraries
 #include <Eigen/Dense>
-// DAME - structure
+// format
+#include "src/format/cp2k.hpp"
+// structure
 #include "src/struc/structure_fwd.hpp"
-
-#ifndef CP2K_PRINT_FUNC
-#define CP2K_PRINT_FUNC 0
-#endif
-
-#ifndef CP2K_PRINT_STATUS
-#define CP2K_PRINT_STATUS 0
-#endif
-
-#ifndef CP2K_PRINT_DATA
-#define CP2K_PRINT_DATA 0
-#endif
 
 #ifndef __cplusplus
 	#error A C++ compiler is required

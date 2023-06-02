@@ -32,9 +32,8 @@ void read(const char* file, const Interval& interval, const AtomType& atomT, Sim
 	//file i/o
 		FILE* reader=NULL;
 		char* input=new char[string::M];
-		char* str_name=new char[string::M];
-		char* str_number=new char[string::M];
 		std::string str;
+		Token token;
 	//simulation flags
 		bool direct;//whether the coordinates are in direct or Cartesian coordinates
 	//time info
@@ -50,6 +49,7 @@ void read(const char* file, const Interval& interval, const AtomType& atomT, Sim
 		else throw std::runtime_error("Invalid units.");
 	//misc
 		bool error=false;
+		bool cell_fixed=false;
 		
 	try{
 		//start the timer
@@ -78,110 +78,121 @@ void read(const char* file, const Interval& interval, const AtomType& atomT, Sim
 		
 		//==== read species ====
 		if(VASP_PRINT_STATUS>0) std::cout<<"read species\n";
-		//read number of species
-		fgets(str_name,string::M,reader);
-		fgets(str_number,string::M,reader);
-		const int nNames=string::substrN(str_name,string::WS);
-		const int nNumbers=string::substrN(str_number,string::WS);
-		const int nSpecies=string::substrN(str_name,string::WS);
-		if(nNames!=nNumbers) throw std::runtime_error("Invalid number of species");
-		if(nSpecies<=0) throw std::runtime_error("Invalid number of species");
-		//read in the species names
-		std::vector<std::string> species(nSpecies);
-		species[0]=std::strtok(str_name,string::WS);
-		for(int i=1; i<nSpecies; ++i) species[i]=std::strtok(NULL,string::WS);
-		//read in the species numbers
-		std::vector<int> nAtoms(nSpecies);
-		nAtoms[0]=std::atoi(std::strtok(str_number,string::WS));
-		for(int i=1; i<nSpecies; ++i) nAtoms[i]=std::atoi(std::strtok(NULL,string::WS));
-		int nAtomsT=0;
-		for(int i=0; i<nSpecies; ++i) nAtomsT+=nAtoms[i];
+		//read names
+		fgets(input,string::M,reader);
+		std::vector<std::string> names;
+		token.read(input,string::WS);
+		while(!token.end()) names.push_back(token.next());
+		//read numbers
+		fgets(input,string::M,reader);
+		std::vector<int> natoms;
+		token.read(input,string::WS);
+		while(!token.end()) natoms.push_back(std::atoi(token.next().c_str()));
+		//check the number of species
+		if(names.size()==0 || natoms.size()==0 || names.size()!=natoms.size()) throw std::runtime_error("Invalid number of species");
+		const int nspecies=names.size();
+		int natomst=0;
+		for(int i=0; i<natoms.size(); ++i) natomst+=natoms[i];
 		
 		//==== read coord ====
 		if(VASP_PRINT_STATUS>0) std::cout<<"read coord\n";
-		fgets(input, string::M, reader);
+		fgets(input,string::M,reader);
 		if(input[0]=='D') direct=true;
 		else direct=false;
 		
 		//==== check if the cell is variable or not ====
 		if(VASP_PRINT_STATUS>0) std::cout<<"Checking whether cell is variable\n";
-		for(int n=0; n<nAtomsT; ++n) fgets(input, string::M, reader);
+		for(int n=0; n<natomst; ++n) fgets(input, string::M, reader);
 		str=std::string(string::trim(fgets(input,string::M,reader)));
-		if(str==sim.name()) sim.cell_fixed()=false;
-		else sim.cell_fixed()=true;
-		// reset the line position 
-		if(!sim.cell_fixed()) for(int i=0; i<HEADER_SIZE; ++i) fgets(input,string::M,reader);
+		if(str==sim.name()) cell_fixed=false;
+		else cell_fixed=true;
 		
 		//==== find the number of timesteps ====
 		if(VASP_PRINT_STATUS>0) std::cout<<"reading the number of timesteps\n";
 		std::rewind(reader);
-		//find the total number of lines in the file
-		int nLines=0;
-		while(fgets(input, string::M, reader)!=NULL){++nLines;};
-		if(sim.cell_fixed()) ts=std::floor((1.0*nLines-HEADER_SIZE)/(1.0*nAtomsT+1.0));
-		else ts=std::floor((1.0*nLines)/(1.0*nAtomsT+1.0+HEADER_SIZE));
+		int nlines=0;
+		while(fgets(input, string::M, reader)!=NULL){++nlines;};
+		if(cell_fixed) ts=std::floor((1.0*nlines-HEADER_SIZE)/(1.0*natomst+1.0));
+		else ts=std::floor((1.0*nlines)/(1.0*natomst+1.0+HEADER_SIZE));
 		
 		//==== reset the line position ====
 		if(VASP_PRINT_STATUS>0) std::cout<<"resetting the line position\n";
 		std::rewind(reader);
-		if(sim.cell_fixed()) for(int i=0; i<HEADER_SIZE; ++i) fgets(input,string::M,reader);
 		
 		//==== set the interval ====
 		if(VASP_PRINT_STATUS>0) std::cout<<"setting the interval\n";
-		if(interval.beg<0) throw std::invalid_argument("Invalid beginning timestep.");
-		const int beg=interval.beg-1;
-		int end=interval.end-1;
-		if(interval.end<0) end=ts+interval.end;
+		if(interval.beg()<0) throw std::invalid_argument("Invalid beginning timestep.");
+		const int beg=interval.beg()-1;
+		int end=interval.end()-1;
+		if(interval.end()<0) end=ts+interval.end();
 		tsint=end-beg+1;
 		
 		//==== print data to screen ====
-		if(VASP_PRINT_DATA>0){
+		if(VASP_PRINT_DATA>-1){
 			std::cout<<"NAME    = "<<sim.name()<<"\n";
 			std::cout<<"ATOMT   = "<<atomT<<"\n";
 			std::cout<<"DIRECT  = "<<(direct?"T":"F")<<"\n";
 			std::cout<<"CELL    = \n"<<lv<<"\n";
-			std::cout<<"SPECIES = "; for(int i=0; i<nSpecies; ++i) std::cout<<species[i]<<" "; std::cout<<"\n";
-			std::cout<<"NUMBERS = "; for(int i=0; i<nSpecies; ++i) std::cout<<nAtoms[i]<<" "; std::cout<<"\n";
-			std::cout<<"NATOMST = "<<nAtomsT<<"\n";
+			std::cout<<"SPECIES = "; for(int i=0; i<names.size(); ++i) std::cout<<names[i]<<" "; std::cout<<"\n";
+			std::cout<<"NUMBERS = "; for(int i=0; i<natoms.size(); ++i) std::cout<<natoms[i]<<" "; std::cout<<"\n";
+			std::cout<<"NATOMST = "<<natomst<<"\n";
 			std::cout<<"INTERVAL   = "<<interval<<"\n";
 			std::cout<<"TIMESTEPS  = "<<ts<<"\n";
-			std::cout<<"N_STEPS    = "<<tsint/interval.stride<<"\n";
+			std::cout<<"N_STEPS    = "<<tsint/interval.stride()<<"\n";
+			std::cout<<"CELL_FIXED = "<<cell_fixed<<"\n";
 		}
 		
 		//==== resize the simulation ====
 		if(VASP_PRINT_STATUS>0) std::cout<<"allocating memory\n";
-		sim.resize(tsint/interval.stride,nAtomsT,atomT);
+		sim.resize(tsint/interval.stride(),natomst,atomT);
 		
 		//==== read positions ====
 		if(VASP_PRINT_STATUS>0) std::cout<<"reading positions\n";
-		//skip timesteps until beg is reached
-		for(int t=0; t<beg; ++t){
-			if(!sim.cell_fixed()) for(int i=0; i<HEADER_SIZE; ++i) fgets(input,string::M,reader); //skip header
-			fgets(input,string::M,reader);//skip single line
-			for(int n=0; n<nAtomsT; ++n) fgets(input,string::M,reader);
-		}
 		//read the positions
-		if(sim.cell_fixed()){
+		if(cell_fixed){
+			//skip header
+			for(int i=0; i<HEADER_SIZE; ++i) fgets(input,string::M,reader);
+			//skip timesteps until beg is reached
+			for(int t=0; t<beg; ++t){
+				//coordinate line
+				fgets(input,string::M,reader);
+				//positions
+				for(int n=0; n<natomst; ++n) fgets(input,string::M,reader);
+			}
+			//initialize lattice vectors
 			for(int t=0; t<sim.timesteps(); ++t) static_cast<Cell&>(sim.frame(t)).init(lv);
+			//read position
 			for(int t=0; t<sim.timesteps(); ++t){
 				if(VASP_PRINT_STATUS>1) std::cout<<"T = "<<t<<"\n";
 				else if(t%1000==0) std::cout<<"T = "<<t<<"\n";
-				fgets(input,string::M,reader);//skip line
-				for(int n=0; n<nAtomsT; ++n){
+				//coordinate lines
+				fgets(input,string::M,reader);
+				//read positions
+				for(int n=0; n<natomst; ++n){
 					std::sscanf(
 						fgets(input,string::M,reader),"%lf %lf %lf",
 						&sim.frame(t).posn(n)[0],&sim.frame(t).posn(n)[1],&sim.frame(t).posn(n)[2]
 					);
 				}
 				//skip "stride-1" steps
-				for(int tt=0; tt<interval.stride-1; ++tt){
+				for(int tt=0; tt<interval.stride()-1; ++tt){
 					fgets(input,string::M,reader);//skip line
-					for(int n=0; n<nAtomsT; ++n){
+					for(int n=0; n<natomst; ++n){
 						fgets(input,string::M,reader);
 					}
 				}
 			}
 		} else {
+			//skip timesteps until beg is reached
+			for(int t=0; t<beg; ++t){
+				//header
+				for(int i=0; i<HEADER_SIZE; ++i) fgets(input,string::M,reader);
+				//coordinate line
+				fgets(input,string::M,reader);
+				//positions
+				for(int n=0; n<natomst; ++n) fgets(input,string::M,reader);
+			}
+			//read positions
 			for(int t=0; t<sim.timesteps(); ++t){
 				if(VASP_PRINT_STATUS>1) std::cout<<"T = "<<t<<"\n";
 				else if(t%1000==0) std::cout<<"T = "<<t<<"\n";
@@ -189,35 +200,32 @@ void read(const char* file, const Interval& interval, const AtomType& atomT, Sim
 				fgets(input,string::M,reader);//name
 				scale=std::atof(fgets(input,string::M,reader));//scale
 				for(int i=0; i<3; ++i){
-					fgets(input, string::M, reader);
-					lv(0,i)=std::atof(std::strtok(input,string::WS));
-					for(int j=1; j<3; ++j){
-						lv(j,i)=std::atof(std::strtok(NULL,string::WS));
+					token.read(fgets(input,string::M,reader),string::WS);
+					for(int j=0; j<3; ++j){
+						lv(j,i)=std::atof(token.next().c_str());
 					}
 				}
+				//initialize lattice vectors
 				static_cast<Cell&>(sim.frame(t)).init(s_len*scale*lv);
+				//skip atom names, numbers, coordinate line
 				fgets(input,string::M,reader);//skip line (atom names)
 				fgets(input,string::M,reader);//skip line (atom numbers)
-				fgets(input,string::M,reader);//skip line (Direct or Cart)
-				for(int n=0; n<nAtomsT; ++n){
+				fgets(input,string::M,reader);//skip line (coordinate)
+				//read positions
+				for(int n=0; n<natomst; ++n){
 					std::sscanf(
 						fgets(input,string::M,reader),"%lf %lf %lf",
 						&sim.frame(t).posn(n)[0],&sim.frame(t).posn(n)[1],&sim.frame(t).posn(n)[2]
 					);
 				}
 				//skip "stride-1" steps
-				for(int tt=0; tt<interval.stride-1; ++tt){
-					fgets(input,string::M,reader);//name
-					fgets(input,string::M,reader);//scale
-					for(int i=0; i<3; ++i){
-						fgets(input,string::M,reader);//lv
-					}
-					fgets(input,string::M,reader);//skip line (atom names)
-					fgets(input,string::M,reader);//skip line (atom numbers)
-					fgets(input,string::M,reader);//skip line (Direct or Cart)
-					for(int n=0; n<nAtomsT; ++n){
-						fgets(input,string::M,reader);
-					}
+				for(int tt=0; tt<interval.stride()-1; ++tt){
+					//header
+					for(int i=0; i<HEADER_SIZE; ++i) fgets(input,string::M,reader);
+					//coordinate line
+					fgets(input,string::M,reader);
+					//positions
+					for(int n=0; n<natomst; ++n) fgets(input,string::M,reader);
 				}
 			}
 		}
@@ -226,14 +234,79 @@ void read(const char* file, const Interval& interval, const AtomType& atomT, Sim
 		if(direct){
 			if(VASP_PRINT_STATUS>-1) std::cout<<"converting to cartesian coordinates\n";
 			for(int t=0; t<sim.timesteps(); ++t){
-				for(int n=0; n<nAtomsT; ++n){
+				for(int n=0; n<natomst; ++n){
 					sim.frame(t).posn(n)=sim.frame(t).R()*sim.frame(t).posn(n);
 				}
 			}
 		} else if(s_len!=1.0){
 			for(int t=0; t<sim.timesteps(); ++t){
-				for(int n=0; n<nAtomsT; ++n){
+				for(int n=0; n<natomst; ++n){
 					sim.frame(t).posn(n)*=s_len;
+				}
+			}
+		}
+		
+		//==== set the names ====
+		if(atomT.name){
+			for(int t=0; t<sim.timesteps(); ++t){
+				int count=0;
+				for(int n=0; n<nspecies; ++n){
+					for(int m=0; m<natoms[n]; ++m){
+						sim.frame(t).name(count++)=names[n];
+					} 
+				}
+			}
+		}
+		
+		//==== set type ====
+		if(atomT.type){
+			for(int t=0; t<sim.timesteps(); ++t){
+				Structure& struc=sim.frame(t);
+				int count=0;
+				for(int n=0; n<nspecies; ++n){
+					for(int m=0; m<natoms[n]; ++m){
+						struc.type(count++)=n;
+					}
+				}
+			}
+		}
+		
+		//==== set an ====
+		if(atomT.an && atomT.name){
+			for(int t=0; t<sim.timesteps(); ++t){
+				Structure& struc=sim.frame(t);
+				int count=0;
+				for(int n=0; n<nspecies; ++n){
+					for(int m=0; m<natoms[n]; ++m){
+						struc.an(count)=ptable::an(struc.name(count).c_str());
+						++count;
+					}
+				}
+			}
+		}
+		
+		//==== set mass ====
+		if(atomT.mass && atomT.an){
+			for(int t=0; t<sim.timesteps(); ++t){
+				Structure& struc=sim.frame(t);
+				int count=0;
+				for(int n=0; n<nspecies; ++n){
+					for(int m=0; m<natoms[n]; ++m){
+						struc.mass(count)=ptable::mass(struc.an(count));
+						++count;
+					}
+				}
+			}
+		} else if(atomT.mass && atomT.name){
+			for(int t=0; t<sim.timesteps(); ++t){
+				Structure& struc=sim.frame(t);
+				int count=0;
+				for(int n=0; n<nspecies; ++n){
+					for(int m=0; m<natoms[n]; ++m){
+						const int an=ptable::an(struc.name(count).c_str());
+						struc.mass(count)=ptable::mass(struc.mass(an));
+						++count;
+					}
 				}
 			}
 		}
@@ -262,11 +335,12 @@ void read(const char* file, const Interval& interval, const AtomType& atomT, Sim
 }
 
 void write(const char* file, const Interval& interval, const AtomType& atomT, const Simulation& sim){
-	/*
 	const char* funcName="write(const char*,const Interval&,const AtomType&,Simulation&)";
 	if(VASP_PRINT_FUNC>0) std::cout<<NAMESPACE_GLOBAL<<"::"<<NAMESPACE_LOCAL<<"::"<<funcName<<":\n";
-	FILE* writer=NULL;
-	bool error=false;
+	//reading/writing
+		FILE* writer=NULL;
+		bool error=false;
+		bool cell_fixed=false;
 	//units
 		double s_len=0.0;
 		if(units::consts::system()==units::System::AU) s_len=units::BOHR;
@@ -281,11 +355,54 @@ void write(const char* file, const Interval& interval, const AtomType& atomT, co
 		//==== check simulation ====
 		if(sim.timesteps()==0) throw std::invalid_argument("Invalid simulation.");
 		
+		//==== set the number of atoms ====
+		const int nAtoms=sim.frame(0).nAtoms();
+		
+		//==== get the species ====
+		std::vector<std::string> species;
+		std::vector<int> natoms;
+		int nspecies=0;
+		std::vector<int> indices(nAtoms);
+		for(int i=0; i<nAtoms; ++i){
+			int index=-1;
+			for(int j=0; j<species.size(); ++j){
+				if(sim.frame(0).name(i)==species[j]){
+					index=j; break;
+				}
+			}
+			if(index<0){
+				species.push_back(sim.frame(0).name(i));
+				natoms.push_back(1);
+				nspecies++;
+				indices[i]=0;
+			} else {
+				indices[i]=natoms[index];
+				natoms[index]++;
+			}
+		}
+		std::vector<int> offsets(nspecies,0);
+		for(int i=1; i<nspecies; ++i){
+			for(int j=0; j<i; ++j){
+				offsets[i]+=natoms[j];
+			}
+		}
+		for(int i=0; i<nAtoms; ++i){
+			for(int j=0; j<species.size(); ++j){
+				if(sim.frame(0).name(i)==species[j]){
+					indices[i]+=offsets[j]; break;
+				}
+			}
+		}
+		std::vector<int> indices2(nAtoms);
+		for(int i=0; i<nAtoms; ++i){
+			indices2[indices[i]]=i;
+		}
+		
 		//==== check timing info ====
-		int beg=interval.beg-1;
+		const int beg=interval.beg()-1;
 		int end;
-		if(interval.end>=0) end=interval.end-1;
-		else end=interval.end+sim.timesteps();
+		if(interval.end()>=0) end=interval.end()-1;
+		else end=interval.end()+sim.timesteps();
 		if(beg<0) throw std::invalid_argument("Invalid beginning timestep.");
 		if(end>=sim.timesteps()) throw std::invalid_argument("Invalid ending timestep.");
 		if(end<beg) throw std::invalid_argument("Invalid timestep interval.");
@@ -295,7 +412,7 @@ void write(const char* file, const Interval& interval, const AtomType& atomT, co
 		if(atomT.frac) coord=std::string("Direct");
 		else coord=std::string("Cart");
 		
-		if(sim.cell_fixed()){
+		if(cell_fixed){
 			fprintf(writer,"%s\n",sim.name().c_str());
 			fprintf(writer,"1.0\n");
 			for(int i=0; i<3; ++i){
@@ -304,18 +421,17 @@ void write(const char* file, const Interval& interval, const AtomType& atomT, co
 				}
 				fprintf(writer,"\n");
 			}
-			for(int i=0; i<nSpecies; ++i) fprintf(writer,"%s ",species[i].c_str());
+			for(int i=0; i<nspecies; ++i) fprintf(writer,"%s ",species[i].c_str());
 			fprintf(writer,"\n");
-			for(int i=0; i<nSpecies; ++i) fprintf(writer,"%i ",nAtoms[i]);
+			for(int i=0; i<nspecies; ++i) fprintf(writer,"%i ",natoms[i]);
 			fprintf(writer,"\n");
 			for(int t=beg; t<=end; ++t){
 				fprintf(writer,"%s\n",coord.c_str());
-				int count=0;
-				for(int n=0; n<nSpecies; ++n){
-					for(int m=0; m<nAtoms[n]; ++m){
-						Eigen::Vector3d posn=sim.frame(t).RInv()*sim.frame(t).posn(count++);
-						fprintf(writer,"%f %f %f\n",posn[0],posn[1],posn[2]);
-					}
+				for(int n=0; n<nAtoms; ++n){
+					Eigen::Vector3d posn;
+					if(atomT.frac) posn=sim.frame(t).RInv()*sim.frame(t).posn(indices2[n]);
+					else posn=sim.frame(t).posn(indices2[n]);
+					fprintf(writer,"%f %f %f\n",posn[0],posn[1],posn[2]);
 				}
 			}
 		} else {
@@ -328,17 +444,16 @@ void write(const char* file, const Interval& interval, const AtomType& atomT, co
 					}
 					fprintf(writer,"\n");
 				}
-				for(int i=0; i<nSpecies; ++i) fprintf(writer,"%s ",species[i].c_str());
+				for(int i=0; i<nspecies; ++i) fprintf(writer,"%s ",species[i].c_str());
 				fprintf(writer,"\n");
-				for(int i=0; i<nSpecies; ++i) fprintf(writer,"%i ",nAtoms[i]);
+				for(int i=0; i<nspecies; ++i) fprintf(writer,"%i ",natoms[i]);
 				fprintf(writer,"\n");
 				fprintf(writer,"%s\n",coord.c_str());
-				int count=0;
-				for(int n=0; n<as.nSpecies(); ++n){
-					for(int m=0; m<as.nAtoms(n); ++m){
-						Eigen::Vector3d posn=sim.frame(t).RInv()*sim.frame(t).posn(count++);
-						fprintf(writer,"%f %f %f\n",posn[0],posn[1],posn[2]);
-					}
+				for(int n=0; n<nAtoms; ++n){
+					Eigen::Vector3d posn;
+					if(atomT.frac) posn=sim.frame(t).RInv()*sim.frame(t).posn(indices2[n]);
+					else posn=sim.frame(t).posn(indices2[n]);
+					fprintf(writer,"%f %f %f\n",posn[0],posn[1],posn[2]);
 				}
 			}
 		}
@@ -352,7 +467,6 @@ void write(const char* file, const Interval& interval, const AtomType& atomT, co
 	}
 	
 	if(error) throw std::runtime_error("I/O Exception: Could not write data.");
-	*/
 }
 
 }

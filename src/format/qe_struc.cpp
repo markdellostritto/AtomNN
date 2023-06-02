@@ -63,6 +63,7 @@ void read(const char* file, const AtomType& atomT, Structure& struc){
 		std::vector<int> natoms;
 		int nspecies=0;
 		std::vector<std::string> species;
+		std::vector<int> zval;
 	//cell
 		double alat=0;
 		Eigen::Matrix3d lv=Eigen::Matrix3d::Zero();
@@ -76,6 +77,9 @@ void read(const char* file, const AtomType& atomT, Structure& struc){
 		const char* str_natoms="number of atoms/cell";
 		const char* str_nspecies="number of atomic types";
 		const char* str_species="atomic species  ";
+		const char* str_spin="Magnetic moment per site";
+		const char* str_zval="Zval";
+		const char* str_nelect="number of electrons";
 	//units
 		double s_posn=0.0,s_energy=0.0;
 		if(units::consts::system()==units::System::AU){
@@ -87,6 +91,9 @@ void read(const char* file, const AtomType& atomT, Structure& struc){
 			s_energy=0.5*units::EVpHARTREE;//QE energy: Rydberg
 		}
 		else throw std::runtime_error("Invalid units.");
+	//charge
+		int nelect=0;
+		double qtot=0;
 	//misc
 		bool error=false;
 	
@@ -130,6 +137,14 @@ void read(const char* file, const AtomType& atomT, Structure& struc){
 					fgets(input,string::M,reader);
 					species.push_back(std::string(std::strtok(input,string::WS)));
 				}
+			} else if(std::strstr(input,str_zval)!=NULL){
+				std::vector<std::string> strlist;
+				string::split(input,"=",strlist);
+				zval.push_back(std::round(std::atof(strlist.at(1).c_str())));
+			} else if(std::strstr(input,str_nelect)!=NULL){
+				std::vector<std::string> strlist;
+				string::split(input,"=",strlist);
+				nelect=std::round(std::atof(strlist.at(1).c_str()));
 			} else if(std::strstr(input,str_posn)!=NULL){
 				std::vector<std::string> strlist;
 				for(int i=0; i<nspecies; ++i){
@@ -145,14 +160,22 @@ void read(const char* file, const AtomType& atomT, Structure& struc){
 				}
 			}
 		}
+		int ztot=0;
+		for(int i=0; i<nspecies; ++i){
+			ztot+=zval[i]*natoms[i];
+		}
+		qtot=ztot-nelect;
 		
 		//print parameters
 		if(QE_PRINT_STATUS>0){
 			std::cout<<"ATOM    = "<<atomT<<"\n";
 			std::cout<<"NATOMST = "<<natomst<<"\n";
 			std::cout<<"SPECIES = "; for(int i=0; i<nspecies; ++i) std::cout<<species[i]<<" "; std::cout<<"\n";
+			std::cout<<"ZVAL    = "; for(int i=0; i<nspecies; ++i) std::cout<<zval[i]<<" "; std::cout<<"\n";
 			std::cout<<"NATOMS  = "; for(int i=0; i<natoms.size(); ++i) std::cout<<natoms[i]<<" "; std::cout<<"\n";
 			std::cout<<"ENERGY  = "<<struc.energy()<<"\n";
+			std::cout<<"NELECT  = "<<nelect<<"\n";
+			std::cout<<"QTOT    = "<<qtot<<"\n";
 			std::cout<<"ALAT    = "<<alat<<"\n";
 			std::cout<<"LV      = \n"<<lv<<"\n";
 		}
@@ -169,6 +192,7 @@ void read(const char* file, const AtomType& atomT, Structure& struc){
 		if(QE_PRINT_STATUS>0) std::cout<<"resizing structure\n";
 		struc.resize(natomst,atomT);
 		static_cast<Cell&>(struc).init(alat*lv);
+		struc.qtot()=qtot;
 		
 		//read in stress
 		#ifdef INCLUDE_VIRIAL
@@ -260,7 +284,37 @@ void read(const char* file, const AtomType& atomT, Structure& struc){
 						force[0]=std::atof(strlist.at(6).c_str())*fac;
 						force[1]=std::atof(strlist.at(7).c_str())*fac;
 						force[2]=std::atof(strlist.at(8).c_str())*fac;
-						if(struc.atomType().force) struc.force(i)=force;
+						struc.force(i)=force;
+					}
+				}
+			}
+		}
+		
+		//read in spins
+		if(atomT.spin){
+			if(QE_PRINT_STATUS>0) std::cout<<"reading spins\n";
+			std::rewind(reader);
+			const double fac=1;
+			while(fgets(input,string::M,reader)!=NULL){
+				if(std::strstr(input,str_spin)!=NULL){
+					std::vector<std::string> strlist;
+					for(int i=0; i<natomst; ++i){
+						fgets(input,string::M,reader);
+						std::string istring=std::string(input);
+						std::string str=istring.substr(istring.find_last_of("=")+1,istring.length());
+						const double s=std::atof(str.c_str())*fac;
+						struc.spin(i)<<0,0,s;//for now, assume only collinear spins
+					}
+				}
+			}
+		}
+		
+		//set the types
+		if(atomT.type){
+			for(int i=0; i<struc.nAtoms(); ++i){
+				for(int j=0; j<species.size(); ++j){
+					if(struc.name(i)==species[j]){
+						struc.type(i)=j;
 					}
 				}
 			}
