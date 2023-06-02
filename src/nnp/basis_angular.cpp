@@ -4,19 +4,65 @@
 // c++ libraries
 #include <iostream>
 #include <vector>
-// ann- symmetry functions
-#include "src/nnp/symm_angular_g3.hpp"
-#include "src/nnp/symm_angular_g4.hpp"
-// ann - string
+// math
+#include "src/math/special.hpp"
+// string
 #include "src/str/string.hpp"
-// ann - basis - angular
+#include "src/str/token.hpp"
+// basis - angular
 #include "src/nnp/basis_angular.hpp"
 
 //==== using statements ====
 
 using math::constant::PI;
+using math::constant::RadPI;
+
+//*****************************************
+// PhiAN - angular function names
+//*****************************************
+
+PhiAN PhiAN::read(const char* str){
+	if(std::strcmp(str,"GAUSS")==0) return PhiAN::GAUSS;
+	else if(std::strcmp(str,"IPOWP")==0) return PhiAN::IPOWP;
+	else if(std::strcmp(str,"IPOWS")==0) return PhiAN::IPOWS;
+	else if(std::strcmp(str,"SECHP")==0) return PhiAN::SECHP;
+	else if(std::strcmp(str,"SECHS")==0) return PhiAN::SECHS;
+	else return PhiAN::UNKNOWN;
+}
+
+const char* PhiAN::name(const PhiAN& phiAN){
+	switch(phiAN){
+		case PhiAN::GAUSS: return "GAUSS";
+		case PhiAN::IPOWP: return "IPOWP";
+		case PhiAN::IPOWS: return "IPOWS";
+		case PhiAN::SECHP: return "SECHP";
+		case PhiAN::SECHS: return "SECHS";
+		default: return "UNKNOWN";
+	}
+}
+
+std::ostream& operator<<(std::ostream& out, const PhiAN& phiAN){
+	switch(phiAN){
+		case PhiAN::GAUSS: out<<"GAUSS"; break;
+		case PhiAN::IPOWP: out<<"IPOWP"; break;
+		case PhiAN::IPOWS: out<<"IPOWS"; break;
+		case PhiAN::SECHP: out<<"SECHP"; break;
+		case PhiAN::SECHS: out<<"SECHS"; break;
+		default: out<<"UNKNOWN"; break;
+	}
+	return out;
+}
 
 //==== constructors/destructors ====
+
+/**
+* constructor
+*/
+BasisA::BasisA(double rc, cutoff::Name cutname, cutoff::Norm cutnorm, int size, PhiAN phiAN):Basis(rc,cutname,cutnorm,size){
+	if(phiAN==PhiAN::UNKNOWN) throw std::invalid_argument("BasisA(rc,cutoff::Name,cutoff::Norm,int,PhiAN): invalid angular function type");
+	else phiAN_=phiAN;
+	resize(size);
+}
 
 /**
 * destructor
@@ -25,164 +71,23 @@ BasisA::~BasisA(){
 	clear();
 }
 
-/**
-* copy constructor
-* @param basis - the basis to be copied
-*/
-BasisA::BasisA(const BasisA& basis):normT_(cutoff::Norm::UNKNOWN),phiAN_(PhiAN::UNKNOWN),fA_(NULL),cutoff_(NULL){
-	if(BASIS_ANGULAR_PRINT_FUNC>0) std::cout<<"BasisA(const BasisA&):\n";
-	fA_=NULL;
-	clear();
-	if(basis.cutoff()!=NULL){
-		switch(basis.cutoff()->name()){//cutoff
-			case cutoff::Name::COS: cutoff_=new cutoff::Cos(basis.rc()); break;
-			case cutoff::Name::TANH: cutoff_=new cutoff::Tanh(basis.rc()); break;
-			default: throw std::invalid_argument("Invalid cutoff function");
-		}
-	}
-	rc_=basis.rc();//cutoff value
-	normT_=basis.normT();
-	phiAN_=basis.phiAN();//angular function type
-	nfA_=basis.nfA();//number of angular functions
-	if(nfA_>0){
-		norm_=norm(normT_,rc_);
-		symm_=Eigen::VectorXd::Zero(nfA_);
-		if(phiAN_==PhiAN::G3){
-			fA_=new PhiA*[nfA_];
-			for(int i=0; i<nfA_; ++i) fA_[i]=new PhiA_G3(static_cast<const PhiA_G3&>(basis.fA(i)));
-		} else if(phiAN_==PhiAN::G4){
-			fA_=new PhiA*[nfA_];
-			for(int i=0; i<nfA_; ++i) fA_[i]=new PhiA_G4(static_cast<const PhiA_G4&>(basis.fA(i)));
-		}
-	}
-}
+//==== operators ====
 
 /**
-* assignment operator
-* @param basis - the basis to be copied
-* @return the object assigned
+* print basis
+* @param out - the output stream
+* @param basis - the basis to print
+* @return the output stream
 */
-BasisA& BasisA::operator=(const BasisA& basis){
-	if(BASIS_ANGULAR_PRINT_FUNC>0) std::cout<<"BasisA::operator=(const BasisA&):\n";
-	clear();
-	if(basis.cutoff()!=NULL){
-		switch(basis.cutoff()->name()){//cutoff
-			case cutoff::Name::COS: cutoff_=new cutoff::Cos(basis.rc()); break;
-			case cutoff::Name::TANH: cutoff_=new cutoff::Tanh(basis.rc()); break;
-			default: throw std::invalid_argument("Invalid cutoff function");
-		}
+std::ostream& operator<<(std::ostream& out, const BasisA& basis){
+	out<<"BasisA "<<basis.cutnorm_<<" "<<basis.cutname_<<" "<<basis.rc_<<" "<<basis.phiAN_<<" "<<basis.size_<<" "<<basis.alpha_;
+	for(int i=0; i<basis.size(); ++i){
+		out<<"\n\t"<<basis.eta_[i]<<" "<<basis.zeta_[i]<<" "<<" "<<basis.lambda_[i]<<" ";
 	}
-	rc_=basis.rc();//cutoff value
-	normT_=basis.normT();
-	phiAN_=basis.phiAN();//angular function type
-	nfA_=basis.nfA();//number of angular functions
-	if(nfA_>0){
-		norm_=norm(normT_,rc_);
-		symm_=Eigen::VectorXd::Zero(nfA_);
-		if(phiAN_==PhiAN::G3){
-			fA_=new PhiA*[nfA_];
-			for(int i=0; i<nfA_; ++i) fA_[i]=new PhiA_G3(static_cast<const PhiA_G3&>(basis.fA(i)));
-		} else if(phiAN_==PhiAN::G4){
-			fA_=new PhiA*[nfA_];
-			for(int i=0; i<nfA_; ++i) fA_[i]=new PhiA_G4(static_cast<const PhiA_G4&>(basis.fA(i)));
-		}
-	}
-	return *this;
-}
-
-//==== initialization ====
-
-/**
-* basis initialization - G3
-* @param nA - the number of angular basis functions
-* @param tcut - the type of cutoff functions
-* @param rcut - the cutoff distance
-*/
-void BasisA::init_G3(int nA, cutoff::Norm normT, cutoff::Name tcut, double rcut){
-	if(BASIS_ANGULAR_PRINT_FUNC>0) std::cout<<"BasisA::init_G3(int,cutoff::Name,double):\n";
-	clear();
-	//set basis parameters
-	normT_=normT;//normalization scheme
-	phiAN_=PhiAN::G3;//angular function type
-	nfA_=nA;//number of angular functions
-	switch(tcut){//cutoff
-		case cutoff::Name::COS: cutoff_=new cutoff::Cos(rcut); break;
-		case cutoff::Name::TANH: cutoff_=new cutoff::Tanh(rcut); break;
-		default: throw std::invalid_argument("Invalid cutoff function");
-	}
-	rc_=rcut;//cutoff value
-	if(nfA_>0){
-		norm_=norm(normT_,rc_);
-		//generate symmetry functions
-		symm_=Eigen::VectorXd::Zero(nfA_);
-		fA_=new PhiA*[nfA_];
-		for(int i=0; i<nfA_; ++i){
-			fA_[i]=new PhiA_G3(0.0,0.0,1);
-		}
-	}
-}
-
-/**
-* basis initialization - G4
-* @param nA - the number of angular basis functions
-* @param tcut - the type of cutoff functions
-* @param rcut - the cutoff distance
-*/
-void BasisA::init_G4(int nA, cutoff::Norm normT, cutoff::Name tcut, double rcut){
-	if(BASIS_ANGULAR_PRINT_FUNC>0) std::cout<<"BasisA::init_G4(BasisA&,int,cutoff::Name,double):\n";
-	clear();
-	//set basis parameters
-	normT_=normT;//normalization scheme
-	phiAN_=PhiAN::G4;//angular function type
-	nfA_=nA;//number of angular functions
-	switch(tcut){//cutoff
-		case cutoff::Name::COS: cutoff_=new cutoff::Cos(rcut); break;
-		case cutoff::Name::TANH: cutoff_=new cutoff::Tanh(rcut); break;
-		default: throw std::invalid_argument("Invalid cutoff function");
-	}
-	rc_=rcut;//cutoff value
-	if(nfA_>0){
-		norm_=norm(normT_,rc_);
-		//generate symmetry functions
-		symm_=Eigen::VectorXd::Zero(nfA_);
-		fA_=new PhiA*[nfA_];
-		for(int i=0; i<nfA_; ++i){
-			fA_[i]=new PhiA_G4(0.0,0.0,1);
-		}
-	}
+	return out;
 }
 
 //==== reading/writing ====
-
-/**
-* write basis to file
-* @param filename - the file to which we will write the basis
-* @param basis - the basis to be written
-*/
-void BasisA::write(const char* filename, const BasisA& basis){
-	if(BASIS_ANGULAR_PRINT_FUNC>0) std::cout<<"BasisA::write(const char*,const BasisA&):\n";
-	FILE* writer=fopen(filename,"w");
-	if(writer!=NULL){
-		BasisA::write(writer,basis);
-		fclose(writer);
-		writer=NULL;
-	} else throw std::runtime_error(std::string("BasisA::write(const char*,const BasisA&): Could not write BasisA to file: \"")+std::string(filename)+std::string("\""));
-}
-
-/**
-* read basis from file
-* @param filename - the file which we will read the basis from
-* @param basis - the basis to be read
-*/
-void BasisA::read(const char* filename, BasisA& basis){
-	if(BASIS_ANGULAR_PRINT_FUNC>0) std::cout<<"BasisA::read(const char*,const BasisA&):\n";
-	FILE* reader=fopen(filename,"r");
-	if(reader!=NULL){
-		BasisA::read(reader,basis);
-		fclose(reader);
-		reader=NULL;
-	} else throw std::runtime_error(std::string("BasisA::read(const char*,BasisA&): Could not read BasisA from file: \"")+std::string(filename)+std::string("\""));
-}
 
 /**
 * write basis to file
@@ -191,22 +96,12 @@ void BasisA::read(const char* filename, BasisA& basis){
 */
 void BasisA::write(FILE* writer, const BasisA& basis){
 	if(BASIS_ANGULAR_PRINT_FUNC>0) std::cout<<"BasisA::write(FILE*):\n";
-	const char* str_norm=cutoff::Norm::name(basis.normT());
-	const char* str_tcut=cutoff::Name::name(basis.cutoff()->name());
+	const char* str_tcut=cutoff::Name::name(basis.cutname());
+	const char* str_norm=cutoff::Norm::name(basis.cutnorm());
 	const char* str_phian=PhiAN::name(basis.phiAN());
-	fprintf(writer,"BasisA %s %s %f %s %i\n",str_norm,str_tcut,basis.rc(),str_phian,basis.nfA());
-	if(basis.phiAN()==PhiAN::G3){
-		//tcut,rcut,eta,zeta,lambda
-		for(int i=0; i<basis.nfA(); ++i){
-			const PhiA_G3& g3=static_cast<const PhiA_G3&>(basis.fA(i));
-			fprintf(writer,"\tG3 %f %f %i\n",g3.eta,g3.zeta,g3.lambda);
-		}
-	} else if(basis.phiAN()==PhiAN::G4){
-		//tcut,rcut,eta,zeta,lambda
-		for(int i=0; i<basis.nfA(); ++i){
-			const PhiA_G4& g4=static_cast<const PhiA_G4&>(basis.fA(i));
-			fprintf(writer,"\tG4 %f %f %i\n",g4.eta,g4.zeta,g4.lambda);
-		}
+	fprintf(writer,"BasisA %s %s %f %s %i %i\n",str_norm,str_tcut,basis.rc(),str_phian,basis.size(),basis.alpha());
+	for(int i=0; i<basis.size(); ++i){
+		fprintf(writer,"\t%f %f %i\n",basis.eta(i),basis.zeta(i),basis.lambda(i));
 	}
 }
 
@@ -219,80 +114,27 @@ void BasisA::read(FILE* reader, BasisA& basis){
 	if(BASIS_ANGULAR_PRINT_FUNC>0) std::cout<<"BasisA::read(FILE*, BasisA&):\n";
 	//local variables
 	char* input=new char[string::M];
-	std::vector<std::string> strlist;
-	//split header
-	string::split(fgets(input,string::M,reader),string::WS,strlist);
-	if(strlist.size()!=6) throw std::runtime_error("BasisA::read(FILE*,BasisA&): Invalid BasisR format.");
 	//read header
-	const cutoff::Norm normT=cutoff::Norm::read(strlist[1].c_str());
-	const cutoff::Name tcut=cutoff::Name::read(strlist[2].c_str());
-	const double rc=std::atof(strlist[3].c_str());
-	const std::string phiANstr=strlist[4];
-	const int nfa=std::atoi(strlist[5].c_str());
-	if(nfa>0) basis.symm()=Eigen::VectorXd::Zero(nfa);
-	//loop over all basis functions
-	if(phiANstr=="G3"){
-		basis.init_G3(nfa,normT,tcut,rc);
-		//G3,eta,zeta,lambda
-		for(int i=0; i<basis.nfA(); ++i){
-			string::split(fgets(input,string::M,reader),string::WS,strlist);
-			if(strlist.size()!=1+3) throw std::runtime_error("BasisA::read(FILE*,BasisA&): Invalid G3 format.");
-			const double eta=std::atof(strlist[1].c_str());
-			const double zeta=std::atof(strlist[2].c_str());
-			const int lambda=std::atoi(strlist[3].c_str());
-			static_cast<PhiA_G3&>(basis.fA(i))=PhiA_G3(eta,zeta,lambda);
-		}
-		basis.phiAN()=PhiAN::G3;
-	} else if(phiANstr=="G4"){
-		basis.init_G4(nfa,normT,tcut,rc);
-		//G4,eta,zeta,lambda
-		for(int i=0; i<basis.nfA(); ++i){
-			string::split(fgets(input,string::M,reader),string::WS,strlist);
-			if(strlist.size()!=1+3) throw std::runtime_error("BasisA::read(FILE*,BasisA&): Invalid G4 format.");
-			const double eta=std::atof(strlist[1].c_str());
-			const double zeta=std::atof(strlist[2].c_str());
-			const int lambda=std::atoi(strlist[3].c_str());
-			static_cast<PhiA_G4&>(basis.fA(i))=PhiA_G4(eta,zeta,lambda);
-		}
-		basis.phiAN()=PhiAN::G4;
-	} else throw std::invalid_argument("BasisA::read(FILE*,BasisA&): Invalid angular function type");
+	Token token(fgets(input,string::M,reader),string::WS); token.next();
+	const cutoff::Norm cutnorm=cutoff::Norm::read(token.next().c_str());
+	const cutoff::Name cutname=cutoff::Name::read(token.next().c_str());
+	const double rc=std::atof(token.next().c_str());
+	const PhiAN phiAN=PhiAN::read(token.next().c_str());
+	const int size=std::atoi(token.next().c_str());
+	const int alpha=std::atoi(token.next().c_str());
+	//initialize
+	basis=BasisA(rc,cutname,cutnorm,size,phiAN);
+	//read parameters
+	for(int i=0; i<basis.size(); ++i){
+		token.read(fgets(input,string::M,reader),string::WS);
+		basis.eta(i)=std::atof(token.next().c_str());
+		basis.zeta(i)=std::atof(token.next().c_str());
+		basis.lambda(i)=std::atoi(token.next().c_str());
+	}
+	basis.alpha()=alpha;
+	basis.init();
 	//free local variables
 	delete[] input;
-}
-
-//==== operators ====
-
-bool operator==(const BasisA& basis1, const BasisA& basis2){
-	if(basis1.nfA()!=basis2.nfA()) return false;
-	else if(basis1.normT()!=basis2.normT()) return false;
-	else if(basis1.phiAN()!=basis2.phiAN()) return false;
-	else if(basis1.cutoff()->name()!=basis2.cutoff()->name()) return false;
-	else if(basis1.rc()!=basis2.rc()) return false;
-	else {
-		const int nfA=basis1.nfA();
-		PhiAN phiAN=basis1.phiAN();
-		if(phiAN==PhiAN::G3){
-			for(int i=0; i<nfA; ++i){
-				if(static_cast<const PhiA_G3&>(basis1.fA(i))!=static_cast<const PhiA_G3&>(basis2.fA(i))) return false;
-			}
-		} else if(phiAN==PhiAN::G4){
-			for(int i=0; i<nfA; ++i){
-				if(static_cast<const PhiA_G4&>(basis1.fA(i))!=static_cast<const PhiA_G4&>(basis2.fA(i))) return false;
-			}
-		}
-		return true;
-	}
-}
-
-std::ostream& operator<<(std::ostream& out, const BasisA& basis){
-	if(basis.cutoff_!=NULL) out<<"BasisA "<<basis.norm_<<" "<<basis.cutoff_->name()<<" "<<basis.rc_<<" "<<basis.phiAN_<<" "<<basis.nfA_;
-	else out<<"BasisA UNKNOWN "<<basis.norm_<<" "<<basis.rc_<<" "<<basis.phiAN_<<" "<<basis.nfA_;
-	if(basis.phiAN_==PhiAN::G3){
-		for(int i=0; i<basis.nfA_; ++i) out<<"\n\t"<<static_cast<const PhiA_G3&>(*basis.fA_[i]);
-	} else if(basis.phiAN_==PhiAN::G4){
-		for(int i=0; i<basis.nfA_; ++i) out<<"\n\t"<<static_cast<const PhiA_G4&>(*basis.fA_[i]);
-	}
-	return out;
 }
 
 //==== member functions ====
@@ -302,91 +144,747 @@ std::ostream& operator<<(std::ostream& out, const BasisA& basis){
 */
 void BasisA::clear(){
 	if(BASIS_ANGULAR_PRINT_FUNC>0) std::cout<<"BasisA::clear():\n";
-	if(fA_!=NULL){
-		for(int i=0; i<nfA_; ++i) delete fA_[i];
-		delete[] fA_;
-		fA_=NULL;
-	}
-	if(cutoff_!=NULL){
-		delete cutoff_;
-		cutoff_=NULL;
-	}
-	rc_=0;
-	norm_=0;
-	nfA_=0;
-	norm_=cutoff::Norm::UNKNOWN;
+	Basis::clear();
 	phiAN_=PhiAN::UNKNOWN;
+	eta_.clear();
+	ietap_.clear();
+	zeta_.clear();
+	lambda_.clear();
 }	
+
+void BasisA::resize(int size){
+	if(BASIS_ANGULAR_PRINT_FUNC>0) std::cout<<"BasisA::resize(int):\n";
+	Basis::resize(size);
+	if(size_>0){
+		eta_.resize(size_);
+		ietap_.resize(size_);
+		zeta_.resize(size_);
+		lambda_.resize(size_);
+		phif_.resize(size_);
+		etaf_.resize(3,std::vector<double>(size_));
+	}
+}
+
+void BasisA::init(){
+	if(BASIS_ANGULAR_PRINT_FUNC>0) std::cout<<"BasisA::init():\n";
+	for(int i=0; i<size_; ++i){
+		ietap_[i]=math::special::powint(1.0/eta_[i],alpha_);
+	}
+}
 
 /**
 * compute symmetry functions
-* @param dr - the distance between the central atom and a neighboring atom
+* @param cos - the cosine of the triple
+* @param dr - the triple distances: dr={rij,rik,rjk} with i at the vertex
 */
-void BasisA::symm(double cos, const double d[3]){
-	const double c[3]={
-		cutoff_->val(d[0]),//cut(rij)
-		cutoff_->val(d[1]),//cut(rik)
-		cutoff_->val(d[2]) //cut(rjk)
+double BasisA::symmf(double cos, const double dr[3], double eta, double zeta, int lambda, int alpha)const{
+	if(BASIS_ANGULAR_PRINT_FUNC>0) std::cout<<"BasisA::symm(double,const double*):\n";
+	const double c[2]={
+		cut_func(dr[0]),//cut(rij)
+		cut_func(dr[1])//cut(rik)
+		//cut_func(dr[2]) //cut(rjk)
 	};
-	for(int na=0; na<nfA_; ++na){
-		symm_[na]=fA_[na]->val(cos,d,c)*norm_;
+	double rval=0;
+	const double cprod=c[0]*c[1]*norm_;
+	const double ietap=1.0/math::special::powint(eta,alpha);
+	const double rijp=math::special::powint(dr[0],alpha);
+	const double rikp=math::special::powint(dr[1],alpha);
+	switch(phiAN_){
+		case PhiAN::GAUSS:{
+			rval=pow(fabs(0.5*(1.0+lambda*cos)),zeta)*cprod*exp(-ietap*(rijp+rikp));
+		} break;
+		case PhiAN::IPOWP:{
+			rval=pow(fabs(0.5*(1.0+lambda*cos)),zeta)*cprod*1.0/((1.0+rijp*ietap)*(1.0+rikp*ietap));
+		} break;
+		case PhiAN::IPOWS:{
+			rval=pow(fabs(0.5*(1.0+lambda*cos)),zeta)*cprod*1.0/(1.0+ietap*(rijp+rikp));
+		} break;
+		case PhiAN::SECHP:{
+			rval=pow(fabs(0.5*(1.0+lambda*cos)),zeta)*cprod*math::special::sech(ietap*rijp)*math::special::sech(ietap*rikp);
+		} break;
+		case PhiAN::SECHS:{
+			rval=pow(fabs(0.5*(1.0+lambda*cos)),zeta)*cprod*math::special::sech(ietap*(rijp+rikp));
+		} break;
+		default:
+			throw std::invalid_argument("BasisA::symm(double): Invalid symmetry function.");
+		break;
+	}
+	return rval;
+}
+
+/**
+* compute force
+* @param phi - stores angular gradients
+* @param eta - stores radial gradients
+* @param cos - the cosine of the triple
+* @param dr - the triple distances: r={rij,rik,rjk} with i at the vertex
+* @param dEdG - gradient of energy w.r.t. the inputs
+*/
+void BasisA::symmd(double& fphi, double* feta, double cos, const double dr[3], double eta, double zeta, int lambda, int alpha)const{
+	//compute cutoffs
+	const double c[2]={
+		cut_func(dr[0]),//cut(rij)
+		cut_func(dr[1])//cut(rik)
+		//cut_func(dr[2]) //cut(rjk)
+	};
+	const double g[2]={
+		cut_grad(dr[0]),//cut'(rij)
+		cut_grad(dr[1])//cut'(rik)
+		//cut_grad(dr[2]) //cut'(rjk)
+	};
+	//compute phi, eta
+	fphi=0;
+	feta[0]=0;
+	feta[1]=0;
+	feta[2]=0;
+	const double cprod=c[0]*c[1];
+	const double ietap=1.0/math::special::powint(eta,alpha);
+	const double rijpa=math::special::powint(dr[0],alpha);
+	const double rikpa=math::special::powint(dr[1],alpha);
+	const double dij=alpha*rijpa/dr[0]*c[0];
+	const double dik=alpha*rikpa/dr[1]*c[1];
+	switch(phiAN_){
+		case PhiAN::GAUSS:{
+			//compute distance values
+			const double expf=exp(-ietap*(rijpa+rikpa));
+			/*
+			//compute angular values
+			const double cw=fabs(0.5*(1.0+lambda*cos));
+			const double cwp=pow(cw,zeta-1.0);
+			const double fangle=cw*cwp;
+			const double gangle=0.5*cwp*zeta*lambda;
+			//compute phi
+			fphi-=expf*cprod*gangle;
+			//compute eta
+			feta[0]-=fangle*(-dij*ietap+g[0])*c[1]*expf;
+			feta[1]-=fangle*(-dik*ietap+g[1])*c[0]*expf;
+			//feta[2]-=0;
+			*/
+			//compute angular values
+			const double cw=fabs(0.5*(1.0+lambda*cos));
+			const double gangle=pow(cw,zeta-1.0)*expf;
+			const double fangle=cw*gangle;
+			//compute phi
+			fphi-=0.5*zeta*lambda*cprod*gangle;
+			//compute eta
+			feta[0]-=fangle*(-dij*ietap+g[0])*c[1];
+			feta[1]-=fangle*(-dik*ietap+g[1])*c[0];
+			//feta[2]-=0;
+			
+		} break;
+		case PhiAN::IPOWP:{
+			//compute distance values
+			const double denij=1.0/(1.0+rijpa*ietap);
+			const double denik=1.0/(1.0+rikpa*ietap);
+			const double denp=denij*denik;
+			/*
+			//compute angular values
+			const double cw=fabs(0.5*(1.0+lambda*cos));
+			const double cwp=pow(cw,zeta-1.0);
+			const double fangle=cw*cwp;
+			const double gangle=0.5*cwp*zeta*lambda;
+			//compute phi
+			fphi-=0.5*zeta*lambda*cprod*gangle;
+			//compute eta
+			feta[0]-=fangle*denp*(-dij*ietap*denij+g[0])*c[1];
+			feta[1]-=fangle*denp*(-dik*ietap*denik+g[1])*c[0];
+			//feta[2]-=0;
+			*/
+			//compute angular values
+			const double cw=fabs(0.5*(1.0+lambda*cos));
+			const double gangle=pow(cw,zeta-1.0)*denp;
+			const double fangle=cw*gangle;
+			//compute phi
+			fphi-=0.5*zeta*lambda*cprod*gangle;
+			//compute eta
+			feta[0]-=fangle*(-dij*ietap*denij+g[0])*c[1];
+			feta[1]-=fangle*(-dik*ietap*denik+g[1])*c[0];
+			//feta[2]-=0;
+		} break;
+		case PhiAN::IPOWS:{
+			//compute distance values
+			const double den=1.0/(1.0+ietap*(rijpa+rikpa));
+			/*
+			//compute angular values
+			const double cw=fabs(0.5*(1.0+lambda*cos));
+			const double cwp=pow(cw,zeta-1.0);
+			const double fangle=cw*cwp*dEdG[i];
+			const double gangle=0.5*cwp*zeta*lambda;
+			//compute phi
+			fphi-=0.5*zeta*lambda*cprod*gangle;
+			//compute eta
+			feta[0]-=fangle*den*(-dij*ietap*den+g[0])*c[1];
+			feta[1]-=fangle*den*(-dik*ietap*den+g[1])*c[0];
+			//feta[2]-=0;
+			*/
+			//compute angular values
+			const double cw=fabs(0.5*(1.0+lambda*cos));
+			const double gangle=pow(cw,zeta-1.0)*den;
+			const double fangle=cw*gangle;
+			//compute phi
+			fphi-=0.5*zeta*lambda*cprod*gangle;
+			//compute eta
+			feta[0]-=fangle*(-dij*ietap*den+g[0])*c[1];
+			feta[1]-=fangle*(-dik*ietap*den+g[1])*c[0];
+			//feta[2]-=0;
+		} break;
+		case PhiAN::SECHP:{
+			//compute distance values
+			const double sechij=math::special::sech(rijpa*ietap);
+			const double sechik=math::special::sech(rikpa*ietap);
+			const double tanhij=std::sqrt(1.0-sechij*sechij);
+			const double tanhik=std::sqrt(1.0-sechik*sechik);
+			const double sechp=sechij*sechik;
+			/*
+			//compute angular values
+			const double cw=fabs(0.5*(1.0+lambda*cos));
+			const double cwp=pow(cw,zeta-1.0);
+			const double fangle=cw*cwp;
+			const double gangle=0.5*cwp*zeta*lambda;
+			//compute phi
+			fphi-=0.5*zeta*lambda*cprod*gangle;
+			//compute eta
+			feta[0]-=fangle*sechp*(-dij*ietap*tanhij+g[0])*c[1];
+			feta[1]-=fangle*sechp*(-dik*ietap*tanhik+g[1])*c[0];
+			//feta[2]-=0;
+			*/
+			//compute angular values
+			const double cw=fabs(0.5*(1.0+lambda*cos));
+			const double gangle=pow(cw,zeta-1.0)*sechp;
+			const double fangle=cw*gangle;
+			//compute phi
+			fphi-=0.5*zeta*lambda*cprod*gangle;
+			//compute eta
+			feta[0]-=fangle*(-dij*ietap*tanhij+g[0])*c[1];
+			feta[1]-=fangle*(-dik*ietap*tanhik+g[1])*c[0];
+			//feta[2]-=0;
+		} break;
+		case PhiAN::SECHS:{
+			//compute distance values
+			const double fsech=math::special::sech(ietap*(rijpa+rikpa));
+			const double ftanh=std::sqrt(1.0-fsech*fsech);
+			/*
+			//compute angular values
+			const double cw=fabs(0.5*(1.0+lambda*cos));
+			const double cwp=pow(cw,zeta-1.0);
+			const double fangle=cw*cwp;
+			const double gangle=0.5*cwp*zeta*lambda;
+			//compute phi
+			fphi-=0.5*zeta*lambda*cprod*gangle;
+			//compute eta
+			feta[0]-=fangle*fsech*(-dij*ietap*ftanh+g[0])*c[1];
+			feta[1]-=fangle*fsech*(-dik*ietap*ftanh+g[1])*c[0];
+			//feta[2]-=0;
+			*/
+			//compute angular values
+			const double cw=fabs(0.5*(1.0+lambda*cos));
+			const double gangle=pow(cw,zeta-1.0)*fsech;
+			const double fangle=cw*gangle;
+			//compute phi
+			fphi-=0.5*zeta*lambda*cprod*gangle;
+			//compute eta
+			feta[0]-=fangle*(-dij*ietap*ftanh+g[0])*c[1];
+			feta[1]-=fangle*(-dik*ietap*ftanh+g[1])*c[0];
+			//feta[2]-=0;
+		} break;
+		default:
+			throw std::invalid_argument("BasisA::symm(double): Invalid symmetry function.");
+		break;
+	}
+	//normalize
+	fphi*=-1*norm_;
+	feta[0]*=-1*norm_;
+	feta[1]*=-1*norm_;
+	feta[2]*=-1*norm_;
+}
+
+/**
+* compute symmetry functions
+* @param cos - the cosine of the triple
+* @param dr - the triple distances: dr={rij,rik,rjk} with i at the vertex
+*/
+void BasisA::symm(double cos, const double dr[3]){
+	if(BASIS_ANGULAR_PRINT_FUNC>0) std::cout<<"BasisA::symm(double,const double*):\n";
+	const double c[2]={
+		cut_func(dr[0]),//cut(rij)
+		cut_func(dr[1])//cut(rik)
+		//cut_func(dr[2]) //cut(rjk)
+	};
+	const double cprod=c[0]*c[1]*norm_;
+	const double rijp=math::special::powint(dr[0],alpha_);
+	const double rikp=math::special::powint(dr[1],alpha_);
+	switch(phiAN_){
+		case PhiAN::GAUSS:{
+			for(int i=0; i<size_; ++i){
+				symm_[i]=pow(fabs(0.5*(1.0+lambda_[i]*cos)),zeta_[i])*cprod*exp(-ietap_[i]*(rijp+rikp));
+			}
+		} break;
+		case PhiAN::IPOWP:{
+			for(int i=0; i<size_; ++i){
+				symm_[i]=pow(fabs(0.5*(1.0+lambda_[i]*cos)),zeta_[i])*cprod*1.0/((1.0+ietap_[i]*rijp)*(1.0+ietap_[i]*rikp));
+			}
+		} break;
+		case PhiAN::IPOWS:{
+			for(int i=0; i<size_; ++i){
+				symm_[i]=pow(fabs(0.5*(1.0+lambda_[i]*cos)),zeta_[i])*cprod*1.0/(1.0+ietap_[i]*(rijp+rikp));
+			}
+		} break;
+		case PhiAN::SECHP:{
+			for(int i=0; i<size_; ++i){
+				symm_[i]=pow(fabs(0.5*(1.0+lambda_[i]*cos)),zeta_[i])*cprod*math::special::sech(ietap_[i]*rijp)*math::special::sech(ietap_[i]*rikp);
+			}
+		} break;
+		case PhiAN::SECHS:{
+			for(int i=0; i<size_; ++i){
+				symm_[i]=pow(fabs(0.5*(1.0+lambda_[i]*cos)),zeta_[i])*cprod*math::special::sech(ietap_[i]*(rijp+rikp));
+			}
+		} break;
+		default:
+			throw std::invalid_argument("BasisA::symm(double): Invalid symmetry function.");
+		break;
 	}
 }
 
 /**
 * compute force
-* @param dr - the distance between the central atom and a neighboring atom
+* @param phi - stores angular gradients
+* @param eta - stores radial gradients
+* @param cos - the cosine of the triple
+* @param dr - the triple distances: r={rij,rik,rjk} with i at the vertex
 * @param dEdG - gradient of energy w.r.t. the inputs
 */
-void BasisA::force(double& phi, double* eta, double cos, const double d[3], const double* dEdG)const{
-	double fangle,gangle,fdist;
-	double gradd[3];//grad w.r.t. distance (not angle)
-	const double c[3]={
-		cutoff_->val(d[0]),//cut(rij)
-		cutoff_->val(d[1]),//cut(rik)
-		cutoff_->val(d[2]) //cut(rjk)
+void BasisA::force(double& phi, double* eta, double cos, const double dr[3], const double* dEdG)const{
+	//compute cutoffs
+	const double c[2]={
+		cut_func(dr[0]),//cut(rij)
+		cut_func(dr[1])//cut(rik)
+		//cut_func(dr[2]) //cut(rjk)
 	};
-	const double g[3]={
-		cutoff_->grad(d[0]),//cut'(rij)
-		cutoff_->grad(d[1]),//cut'(rik)
-		cutoff_->grad(d[2]) //cut'(rjk)
+	const double g[2]={
+		cut_grad(dr[0]),//cut'(rij)
+		cut_grad(dr[1])//cut'(rik)
+		//cut_grad(dr[2]) //cut'(rjk)
 	};
+	//compute phi, eta
 	phi=0;
 	eta[0]=0;
 	eta[1]=0;
 	eta[2]=0;
-	for(int na=0; na<nfA_; ++na){
-		//compute
-		fA_[na]->compute_angle(cos,fangle,gangle);
-		fA_[na]->compute_dist(d,c,g,fdist,gradd);
-		//compute phi
-		phi-=dEdG[na]*fdist*gangle;
-		//compute eta
-		fangle*=dEdG[na];
-		eta[0]-=fangle*gradd[0];
-		eta[1]-=fangle*gradd[1];
-		eta[2]-=fangle*gradd[2];
+	const double cprod=c[0]*c[1];
+	const double rijp=math::special::powint(dr[0],alpha_);
+	const double rikp=math::special::powint(dr[1],alpha_);
+	const double dij=alpha_*rijp/dr[0]*c[0];
+	const double dik=alpha_*rikp/dr[1]*c[1];
+	switch(phiAN_){
+		case PhiAN::GAUSS:{
+			for(int i=0; i<size_; ++i){
+				//compute distance values
+				const double expf=exp(-ietap_[i]*(rijp+rikp));
+				/*
+				//compute angular values
+				const double cw=fabs(0.5*(1.0+lambda_[i]*cos));
+				const double cwp=pow(cw,zeta_[i]-1.0);
+				const double fangle=cw*cwp*dEdG[i];
+				const double gangle=0.5*cwp*zeta_[i]*lambda_[i];
+				//compute phi
+				phi-=dEdG[i]*expf*cprod*gangle;
+				//compute eta
+				eta[0]-=fangle*(-dij*ietap_[i]+g[0])*c[1]*expf;
+				eta[1]-=fangle*(-dik*ietap_[i]+g[1])*c[0]*expf;
+				//eta[2]-=0;
+				*/
+				//compute angular values
+				const double cw=fabs(0.5*(1.0+lambda_[i]*cos));
+				const double gangle=pow(cw,zeta_[i]-1.0)*dEdG[i]*expf;
+				const double fangle=cw*gangle;
+				//compute phi
+				phi-=0.5*zeta_[i]*lambda_[i]*cprod*gangle;
+				//compute eta
+				eta[0]-=fangle*(-dij*ietap_[i]+g[0])*c[1];
+				eta[1]-=fangle*(-dik*ietap_[i]+g[1])*c[0];
+				//eta[2]-=0;
+			}
+		} break;
+		case PhiAN::IPOWP:{
+			for(int i=0; i<size_; ++i){
+				//compute distance values
+				const double denij=1.0/(1.0+ietap_[i]*rijp);
+				const double denik=1.0/(1.0+ietap_[i]*rikp);
+				const double denp=denij*denik;
+				/*
+				//compute angular values
+				const double cw=fabs(0.5*(1.0+lambda_[i]*cos));
+				const double cwp=pow(cw,zeta_[i]-1.0);
+				const double fangle=cw*cwp*dEdG[i];
+				const double gangle=0.5*cwp*zeta_[i]*lambda_[i];
+				//compute phi
+				phi-=dEdG[i]*denp*cprod*gangle;
+				//compute eta
+				eta[0]-=fangle*(-dij*ietap_[i]*denij+g[0])*c[1]*denp;
+				eta[1]-=fangle*(-dik*ietap_[i]*denik+g[1])*c[0]*denp;
+				//eta[2]-=0;
+				*/
+				//compute angular values
+				const double cw=fabs(0.5*(1.0+lambda_[i]*cos));
+				const double gangle=pow(cw,zeta_[i]-1.0)*dEdG[i]*denp;
+				const double fangle=cw*gangle;
+				//compute phi
+				phi-=0.5*zeta_[i]*lambda_[i]*cprod*gangle;
+				//compute eta
+				eta[0]-=fangle*(-dij*ietap_[i]*denij+g[0])*c[1];
+				eta[1]-=fangle*(-dik*ietap_[i]*denik+g[1])*c[0];
+				//eta[2]-=0;
+			}
+		} break;
+		case PhiAN::IPOWS:{
+			for(int i=0; i<size_; ++i){
+				//compute distance values
+				const double den=1.0/(1.0+ietap_[i]*(rijp+rikp));
+				/*
+				//compute angular values
+				const double cw=fabs(0.5*(1.0+lambda_[i]*cos));
+				const double cwp=pow(cw,zeta_[i]-1.0);
+				const double fangle=cw*cwp*dEdG[i];
+				const double gangle=0.5*cwp*zeta_[i]*lambda_[i];
+				//compute phi
+				phi-=dEdG[i]*den*cprod*gangle;
+				//compute eta
+				eta[0]-=fangle*(-dij*ietap_[i]*den+g[0])*c[1]*den;
+				eta[1]-=fangle*(-dik*ietap_[i]*den+g[1])*c[0]*den;
+				//eta[2]-=0;
+				*/
+				//compute angular values
+				const double cw=fabs(0.5*(1.0+lambda_[i]*cos));
+				const double gangle=pow(cw,zeta_[i]-1.0)*dEdG[i]*den;
+				const double fangle=cw*gangle;
+				//compute phi
+				phi-=0.5*zeta_[i]*lambda_[i]*cprod*gangle;
+				//compute eta
+				eta[0]-=fangle*(-dij*ietap_[i]*den+g[0])*c[1];
+				eta[1]-=fangle*(-dik*ietap_[i]*den+g[1])*c[0];
+				//eta[2]-=0;
+			}
+		} break;
+		case PhiAN::SECHP:{
+			for(int i=0; i<size_; ++i){
+				//compute distance values
+				const double sechij=math::special::sech(ietap_[i]*rijp);
+				const double sechik=math::special::sech(ietap_[i]*rikp);
+				const double tanhij=std::sqrt(1.0-sechij*sechij);
+				const double tanhik=std::sqrt(1.0-sechik*sechik);
+				const double sechp=sechij*sechik;
+				/*
+				//compute angular values
+				const double cw=fabs(0.5*(1.0+lambda_[i]*cos));
+				const double cwp=pow(cw,zeta_[i]-1.0);
+				const double fangle=cw*cwp*dEdG[i];
+				const double gangle=0.5*cwp*zeta_[i]*lambda_[i];
+				//compute phi
+				phi-=dEdG[i]*sechp*cprod*gangle;
+				//compute eta
+				eta[0]-=fangle*(-dij*ietap_[i]*tanhij+g[0])*c[1]*sechp;
+				eta[1]-=fangle*(-dik*ietap_[i]*tanhik+g[1])*c[0]*sechp;
+				//eta[2]-=0;
+				*/
+				//compute angular values
+				const double cw=fabs(0.5*(1.0+lambda_[i]*cos));
+				const double gangle=pow(cw,zeta_[i]-1.0)*dEdG[i]*sechp;
+				const double fangle=cw*gangle;
+				//compute phi
+				phi-=0.5*zeta_[i]*lambda_[i]*cprod*gangle;
+				//compute eta
+				eta[0]-=fangle*(-dij*ietap_[i]*tanhij+g[0])*c[1];
+				eta[1]-=fangle*(-dik*ietap_[i]*tanhik+g[1])*c[0];
+				//eta[2]-=0;
+			}
+		} break;
+		case PhiAN::SECHS:{
+			for(int i=0; i<size_; ++i){
+				//compute distance values
+				const double fsech=math::special::sech(ietap_[i]*(rijp+rikp));
+				const double ftanh=std::sqrt(1.0-fsech*fsech);
+				/*
+				//compute angular values
+				const double cw=fabs(0.5*(1.0+lambda_[i]*cos));
+				const double cwp=pow(cw,zeta_[i]-1.0);
+				const double fangle=cw*cwp*dEdG[i];
+				const double gangle=0.5*cwp*zeta_[i]*lambda_[i];
+				//compute phi
+				phi-=dEdG[i]*fsech*cprod*gangle;
+				//compute eta
+				eta[0]-=fangle*(-dij*ietap_[i]*ftanh+g[0])*c[1]*fsech;
+				eta[1]-=fangle*(-dik*ietap_[i]*ftanh+g[1])*c[0]*fsech;
+				//eta[2]-=0;
+				*/
+				//compute angular values
+				const double cw=fabs(0.5*(1.0+lambda_[i]*cos));
+				const double gangle=pow(cw,zeta_[i]-1.0)*dEdG[i]*fsech;
+				const double fangle=cw*gangle;
+				//compute phi
+				phi-=0.5*zeta_[i]*lambda_[i]*cprod*gangle;
+				//compute eta
+				eta[0]-=fangle*(-dij*ietap_[i]*ftanh+g[0])*c[1];
+				eta[1]-=fangle*(-dik*ietap_[i]*ftanh+g[1])*c[0];
+				//eta[2]-=0;
+			}
+		} break;
+		default:
+			throw std::invalid_argument("BasisA::force(double&,double*,double,const double[3],const double*)const: Invalid symmetry function.");
+		break;
 	}
+	//normalize
 	phi*=norm_;
 	eta[0]*=norm_;
 	eta[1]*=norm_;
 	eta[2]*=norm_;
 }
 
-//==== static functions ====
-
-/**
-* compute the normalization constant
-* @param rc - the cutoff radius
-*/
-double BasisA::norm(cutoff::Norm normT, double rc){
-	double tmp=0;
-	switch(normT){
-		case cutoff::Norm::UNIT: tmp=1.0; break;
-		case cutoff::Norm::VOL: tmp=1.0/(0.5*4.0/3.0*(PI*PI-6.0)/PI*rc*rc*rc); break;
-		default: throw std::invalid_argument("BasisA::norm(NormT::type,double): invalid normalization scheme.");
+void BasisA::forcep(double cos, const double dr[3]){
+	//compute cutoffs
+	const double c[2]={
+		cut_func(dr[0]),//cut(rij)
+		cut_func(dr[1])//cut(rik)
+		//cut_func(dr[2]) //cut(rjk)
+	};
+	const double g[2]={
+		cut_grad(dr[0]),//cut'(rij)
+		cut_grad(dr[1])//cut'(rik)
+		//cut_grad(dr[2]) //cut'(rjk)
+	};	
+	//compute phi, eta
+	for(int i=0; i<size_; ++i) phif_[i]=0;
+	for(int j=0; j<size_; ++j) etaf_[0][j]=0;
+	for(int j=0; j<size_; ++j) etaf_[1][j]=0;
+	for(int j=0; j<size_; ++j) etaf_[2][j]=0;
+	const double cprod=c[0]*c[1];
+	const double rijp=math::special::powint(dr[0],alpha_);
+	const double rikp=math::special::powint(dr[1],alpha_);
+	const double dij=alpha_*rijp/dr[0]*c[0];
+	const double dik=alpha_*rikp/dr[1]*c[1];
+	switch(phiAN_){
+		case PhiAN::GAUSS:{
+			for(int i=0; i<size_; ++i){
+				//compute distance values
+				const double expf=exp(-ietap_[i]*(rijp+rikp));
+				//compute angular values
+				const double cw=fabs(0.5*(1.0+lambda_[i]*cos));
+				const double cwp=pow(cw,zeta_[i]-1.0);
+				const double fangle=cw*cwp;
+				const double gangle=0.5*cwp*zeta_[i]*lambda_[i];
+				//compute phi
+				phif_[i]=expf*cprod*gangle*norm_;
+				//compute eta
+				etaf_[0][i]=fangle*(-dij*ietap_[i]+g[0])*c[1]*expf*norm_;
+				etaf_[1][i]=fangle*(-dik*ietap_[i]+g[1])*c[0]*expf*norm_;
+				//etaf_[2][i]=0;
+			}
+		} break;
+		case PhiAN::IPOWP:{
+			for(int i=0; i<size_; ++i){
+				//compute distance values
+				const double denij=1.0/(1.0+ietap_[i]*rijp);
+				const double denik=1.0/(1.0+ietap_[i]*rikp);
+				const double denp=denij*denik;
+				//compute angular values
+				const double cw=fabs(0.5*(1.0+lambda_[i]*cos));
+				const double cwp=pow(cw,zeta_[i]-1.0);
+				const double fangle=cw*cwp;
+				const double gangle=0.5*cwp*zeta_[i]*lambda_[i];
+				//compute phi
+				phif_[i]=denp*cprod*gangle*norm_;
+				//compute eta
+				etaf_[0][i]=fangle*(-dij*ietap_[i]*denij+g[0])*c[1]*denp*norm_;
+				etaf_[1][i]=fangle*(-dik*ietap_[i]*denik+g[1])*c[0]*denp*norm_;
+				//etaf_[2][i]=0;
+			}
+		} break;
+		case PhiAN::IPOWS:{
+			for(int i=0; i<size_; ++i){
+				//compute distance values
+				const double den=1.0/(1.0+ietap_[i]*(rijp+rikp));
+				//compute angular values
+				const double cw=fabs(0.5*(1.0+lambda_[i]*cos));
+				const double cwp=pow(cw,zeta_[i]-1.0);
+				const double fangle=cw*cwp;
+				const double gangle=0.5*cwp*zeta_[i]*lambda_[i];
+				//compute phi
+				phif_[i]=den*cprod*gangle*norm_;
+				//compute eta
+				etaf_[0][i]=fangle*(-dij*ietap_[i]*den+g[0])*c[1]*den*norm_;
+				etaf_[1][i]=fangle*(-dik*ietap_[i]*den+g[1])*c[0]*den*norm_;
+				//etaf_[2][i]=0;
+			}
+		} break;
+		case PhiAN::SECHP:{
+			for(int i=0; i<size_; ++i){
+				//compute distance values
+				const double sechij=math::special::sech(ietap_[i]*rijp);
+				const double sechik=math::special::sech(ietap_[i]*rikp);
+				const double tanhij=std::sqrt(1.0-sechij*sechij);
+				const double tanhik=std::sqrt(1.0-sechik*sechik);
+				const double sechp=sechij*sechik;
+				//compute angular values
+				const double cw=fabs(0.5*(1.0+lambda_[i]*cos));
+				const double cwp=pow(cw,zeta_[i]-1.0);
+				const double fangle=cw*cwp;
+				const double gangle=0.5*cwp*zeta_[i]*lambda_[i];
+				//compute phi
+				phif_[i]=sechp*cprod*gangle*norm_;
+				//compute eta
+				etaf_[0][i]=fangle*(-dij*ietap_[i]*tanhij+g[0])*c[1]*sechp*norm_;
+				etaf_[1][i]=fangle*(-dik*ietap_[i]*tanhik+g[1])*c[0]*sechp*norm_;
+				//etaf_[2][i]=0;
+			}
+		} break;
+		case PhiAN::SECHS:{
+			for(int i=0; i<size_; ++i){
+				//compute distance values
+				const double fsech=math::special::sech(ietap_[i]*(rijp+rikp));
+				const double ftanh=std::sqrt(1.0-fsech*fsech);
+				//compute angular values
+				const double cw=fabs(0.5*(1.0+lambda_[i]*cos));
+				const double cwp=pow(cw,zeta_[i]-1.0);
+				const double fangle=cw*cwp;
+				const double gangle=0.5*cwp*zeta_[i]*lambda_[i];
+				//compute phi
+				phif_[i]=fsech*cprod*gangle*norm_;
+				//compute eta
+				etaf_[0][i]=fangle*(-dij*ietap_[i]*ftanh+g[0])*c[1]*fsech*norm_;
+				etaf_[1][i]=fangle*(-dik*ietap_[i]*ftanh+g[1])*c[0]*fsech*norm_;
+				//etaf_[2][i]=0;
+			}
+		} break;
+		default:
+			throw std::invalid_argument("BasisA::force(double&,double*,double,const double[3],const double*)const: Invalid symmetry function.");
+		break;
 	}
-	return tmp;
+}
+
+void BasisA::compute(double cos, const double dr[3], double* symm, double* phi, double* eta0, double* eta1, double* eta2)const{
+	//compute cutoffs
+	const double c[2]={
+		cut_func(dr[0]),//cut(rij)
+		cut_func(dr[1])//cut(rik)
+		//cut_func(dr[2]) //cut(rjk)
+	};
+	const double g[2]={
+		cut_grad(dr[0]),//cut'(rij)
+		cut_grad(dr[1])//cut'(rik)
+		//cut_grad(dr[2]) //cut'(rjk)
+	};	
+	//compute phi, eta
+	const double cprod=c[0]*c[1];
+	const double rijp=math::special::powint(dr[0],alpha_);
+	const double rikp=math::special::powint(dr[1],alpha_);
+	const double dij=alpha_*rijp/dr[0]*c[0];
+	const double dik=alpha_*rikp/dr[1]*c[1];
+	switch(phiAN_){
+		case PhiAN::GAUSS:{
+			for(int i=0; i<size_; ++i){
+				//compute distance values
+				const double expf=exp(-ietap_[i]*(rijp+rikp));
+				//compute angular values
+				const double cw=fabs(0.5*(1.0+lambda_[i]*cos));
+				const double cwp=pow(cw,zeta_[i]-1.0);
+				const double fangle=cw*cwp;
+				const double gangle=0.5*cwp*zeta_[i]*lambda_[i];
+				//compute symm
+				symm[i]+=norm_*pow(fabs(0.5*(1.0+lambda_[i]*cos)),zeta_[i])*cprod*expf;
+				//compute phi
+				phi[i]-=norm_*expf*cprod*gangle;
+				//compute eta
+				eta0[i]-=norm_*fangle*(-dij*ietap_[i]+g[0])*c[1]*expf;
+				eta1[i]-=norm_*fangle*(-dik*ietap_[i]+g[1])*c[0]*expf;
+				//eta2[i]-=0;
+			}
+		} break;
+		case PhiAN::IPOWP:{
+			for(int i=0; i<size_; ++i){
+				//compute distance values
+				const double denij=1.0/(1.0+ietap_[i]*rijp);
+				const double denik=1.0/(1.0+ietap_[i]*rikp);
+				const double denp=denij*denik;
+				//compute angular values
+				const double cw=fabs(0.5*(1.0+lambda_[i]*cos));
+				const double cwp=pow(cw,zeta_[i]-1.0);
+				const double fangle=cw*cwp;
+				const double gangle=0.5*cwp*zeta_[i]*lambda_[i];
+				//compute symm
+				symm[i]+=norm_*pow(fabs(0.5*(1.0+lambda_[i]*cos)),zeta_[i])*cprod*denp;
+				//compute phi
+				phi[i]-=norm_*denp*cprod*gangle;
+				//compute eta
+				eta0[i]-=norm_*fangle*(-dij*ietap_[i]*denij+g[0])*c[1]*denp;
+				eta1[i]-=norm_*fangle*(-dik*ietap_[i]*denik+g[1])*c[0]*denp;
+				//eta2[i]-=0;
+			}
+		} break;
+		case PhiAN::IPOWS:{
+			for(int i=0; i<size_; ++i){
+				//compute distance values
+				const double den=1.0/(1.0+ietap_[i]*(rijp+rikp));
+				//compute angular values
+				const double cw=fabs(0.5*(1.0+lambda_[i]*cos));
+				const double cwp=pow(cw,zeta_[i]-1.0);
+				const double fangle=cw*cwp;
+				const double gangle=0.5*cwp*zeta_[i]*lambda_[i];
+				//compute symm
+				symm[i]+=norm_*pow(fabs(0.5*(1.0+lambda_[i]*cos)),zeta_[i])*cprod*den;
+				//compute phi
+				phi[i]-=norm_*den*cprod*gangle;
+				//compute eta
+				eta0[i]-=norm_*fangle*(-dij*ietap_[i]*den+g[0])*c[1]*den;
+				eta1[i]-=norm_*fangle*(-dik*ietap_[i]*den+g[1])*c[0]*den;
+				//eta2[i]-=0;
+			}
+		} break;
+		case PhiAN::SECHP:{
+			for(int i=0; i<size_; ++i){
+				//compute distance values
+				const double sechij=math::special::sech(ietap_[i]*rijp);
+				const double sechik=math::special::sech(ietap_[i]*rikp);
+				const double tanhij=std::sqrt(1.0-sechij*sechij);
+				const double tanhik=std::sqrt(1.0-sechik*sechik);
+				const double sechp=sechij*sechik;
+				//compute angular values
+				const double cw=fabs(0.5*(1.0+lambda_[i]*cos));
+				const double cwp=pow(cw,zeta_[i]-1.0);
+				const double fangle=cw*cwp;
+				const double gangle=0.5*cwp*zeta_[i]*lambda_[i];
+				//compute symm
+				symm[i]+=norm_*pow(fabs(0.5*(1.0+lambda_[i]*cos)),zeta_[i])*cprod*sechp;
+				//compute phi
+				phi[i]-=norm_*sechp*cprod*gangle;
+				//compute eta
+				eta0[i]-=norm_*fangle*(-dij*ietap_[i]*tanhij+g[0])*c[1]*sechp;
+				eta1[i]-=norm_*fangle*(-dik*ietap_[i]*tanhik+g[1])*c[0]*sechp;
+				//eta2[i]-=0;
+			}
+		} break;
+		case PhiAN::SECHS:{
+			for(int i=0; i<size_; ++i){
+				//compute distance values
+				const double fsech=math::special::sech(ietap_[i]*(rijp+rikp));
+				const double ftanh=std::sqrt(1.0-fsech*fsech);
+				//compute angular values
+				const double cw=fabs(0.5*(1.0+lambda_[i]*cos));
+				const double cwp=pow(cw,zeta_[i]-1.0);
+				const double fangle=cw*cwp;
+				const double gangle=0.5*cwp*zeta_[i]*lambda_[i];
+				//compute symm
+				symm[i]+=norm_*pow(fabs(0.5*(1.0+lambda_[i]*cos)),zeta_[i])*cprod*fsech;
+				//compute phi
+				phi[i]-=norm_*fsech*cprod*gangle;
+				//compute eta
+				eta0[i]-=norm_*fangle*(-dij*ietap_[i]*ftanh+g[0])*c[1]*fsech;
+				eta1[i]-=norm_*fangle*(-dik*ietap_[i]*ftanh+g[1])*c[0]*fsech;
+				//eta2[i]-=0;
+			}
+		} break;
+		default:
+			throw std::invalid_argument("BasisA::symm(double): Invalid symmetry function.");
+		break;
+	}
 }
 
 //==== serialization ====
@@ -399,20 +897,17 @@ namespace serialize{
 	
 	template <> int nbytes(const BasisA& obj){
 		if(BASIS_ANGULAR_PRINT_FUNC>0) std::cout<<"nbytes(const BasisA&):\n";
-		int N=0;
-		cutoff::Name tcut=cutoff::Name::UNKNOWN;
-		if(obj.cutoff()!=NULL) tcut=obj.cutoff()->name();
-		N+=sizeof(obj.normT());//name of normalization scheme
-		N+=sizeof(tcut);//name of cutoff function
-		N+=sizeof(obj.rc());//cutoff value
-		N+=sizeof(obj.phiAN());//name of symmetry functions
-		N+=sizeof(int);//number of symmetry functions
-		switch(obj.phiAN()){
-			case PhiAN::G3: for(int i=0; i<obj.nfA(); ++i) N+=nbytes(static_cast<const PhiA_G3&>(obj.fA(i))); break;
-			case PhiAN::G4: for(int i=0; i<obj.nfA(); ++i) N+=nbytes(static_cast<const PhiA_G4&>(obj.fA(i))); break;
-			default: break;
-		}
-		return N;
+		int size=0;
+		size+=sizeof(obj.cutname());//cutoff name
+		size+=sizeof(obj.cutnorm());//cutoff normalization
+		size+=sizeof(obj.rc());//cutoff radius
+		size+=sizeof(obj.size());//number of symmetry functions
+		size+=sizeof(obj.phiAN());//name of symmetry functions
+		size+=sizeof(obj.alpha());//power
+		size+=sizeof(double)*obj.size();//eta
+		size+=sizeof(double)*obj.size();//zeta
+		size+=sizeof(int)*obj.size();//lambda
+		return size;
 	}
 	
 	//**********************************************
@@ -421,18 +916,17 @@ namespace serialize{
 	
 	template <> int pack(const BasisA& obj, char* arr){
 		if(BASIS_ANGULAR_PRINT_FUNC>0) std::cout<<"pack(const BasisA&,char*):\n";
-		int pos=0,nfA=obj.nfA();
-		cutoff::Name tcut=cutoff::Name::UNKNOWN;
-		if(obj.cutoff()!=NULL) tcut=obj.cutoff()->name();
-		std::memcpy(arr+pos,&obj.normT(),sizeof(obj.normT())); pos+=sizeof(obj.normT());
-		std::memcpy(arr+pos,&tcut,sizeof(tcut)); pos+=sizeof(tcut);//name of cutoff function
-		std::memcpy(arr+pos,&obj.rc(),sizeof(obj.rc())); pos+=sizeof(obj.rc());//cutoff value
-		std::memcpy(arr+pos,&obj.phiAN(),sizeof(obj.phiAN())); pos+=sizeof(obj.phiAN());//name of symmetry functions
-		std::memcpy(arr+pos,&nfA,sizeof(nfA)); pos+=sizeof(nfA);//number of symmetry functions
-		switch(obj.phiAN()){
-			case PhiAN::G3: for(int i=0; i<obj.nfA(); ++i) pos+=pack(static_cast<const PhiA_G3&>(obj.fA(i)),arr+pos); break;
-			case PhiAN::G4: for(int i=0; i<obj.nfA(); ++i) pos+=pack(static_cast<const PhiA_G4&>(obj.fA(i)),arr+pos); break;
-			default: break;
+		int pos=0;
+		std::memcpy(arr+pos,&obj.cutname(),sizeof(obj.cutname())); pos+=sizeof(obj.cutname());
+		std::memcpy(arr+pos,&obj.cutnorm(),sizeof(obj.cutnorm())); pos+=sizeof(obj.cutnorm());
+		std::memcpy(arr+pos,&obj.rc(),sizeof(obj.rc())); pos+=sizeof(obj.rc());
+		std::memcpy(arr+pos,&obj.size(),sizeof(obj.size())); pos+=sizeof(obj.size());
+		std::memcpy(arr+pos,&obj.phiAN(),sizeof(obj.phiAN())); pos+=sizeof(obj.phiAN());
+		std::memcpy(arr+pos,&obj.alpha(),sizeof(obj.alpha())); pos+=sizeof(obj.alpha());
+		if(obj.size()>0){
+			std::memcpy(arr+pos,obj.eta().data(),obj.size()*sizeof(double)); pos+=obj.size()*sizeof(double);
+			std::memcpy(arr+pos,obj.zeta().data(),obj.size()*sizeof(double)); pos+=obj.size()*sizeof(double);
+			std::memcpy(arr+pos,obj.lambda().data(),obj.size()*sizeof(int)); pos+=obj.size()*sizeof(int);
 		}
 		return pos;
 	}
@@ -443,21 +937,27 @@ namespace serialize{
 	
 	template <> int unpack(BasisA& obj, const char* arr){
 		if(BASIS_ANGULAR_PRINT_FUNC>0) std::cout<<"unpack(BasisA&,const char*):\n";
-		int pos=0,nfA=0;
+		int pos=0;
+		cutoff::Name cutname=cutoff::Name::UNKNOWN;
+		cutoff::Norm cutnorm=cutoff::Norm::UNKNOWN;
 		double rc=0;
-		cutoff::Norm normT=cutoff::Norm::UNKNOWN;
+		int size=0;
+		int alpha=0;
 		PhiAN phiAN=PhiAN::UNKNOWN;
-		cutoff::Name cutN=cutoff::Name::UNKNOWN;
-		std::memcpy(&normT,arr+pos,sizeof(normT)); pos+=sizeof(normT);
-		std::memcpy(&cutN,arr+pos,sizeof(cutN)); pos+=sizeof(cutN);//name of cutoff function
-		std::memcpy(&rc,arr+pos,sizeof(rc)); pos+=sizeof(rc);//cutoff value
-		std::memcpy(&phiAN,arr+pos,sizeof(phiAN)); pos+=sizeof(phiAN);//name of symmetry functions
-		std::memcpy(&nfA,arr+pos,sizeof(nfA)); pos+=sizeof(nfA);//number of symmetry functions
-		switch(phiAN){
-			case PhiAN::G3: obj.init_G3(nfA,normT,cutN,rc); for(int i=0; i<obj.nfA(); ++i) pos+=unpack(static_cast<PhiA_G3&>(obj.fA(i)),arr+pos); break;
-			case PhiAN::G4: obj.init_G4(nfA,normT,cutN,rc); for(int i=0; i<obj.nfA(); ++i) pos+=unpack(static_cast<PhiA_G4&>(obj.fA(i)),arr+pos); break;
-			default: break;
+		std::memcpy(&cutname,arr+pos,sizeof(cutname)); pos+=sizeof(cutname);
+		std::memcpy(&cutnorm,arr+pos,sizeof(cutnorm)); pos+=sizeof(cutnorm);
+		std::memcpy(&rc,arr+pos,sizeof(rc)); pos+=sizeof(rc);
+		std::memcpy(&size,arr+pos,sizeof(size)); pos+=sizeof(size);
+		std::memcpy(&phiAN,arr+pos,sizeof(PhiAN)); pos+=sizeof(PhiAN);
+		std::memcpy(&alpha,arr+pos,sizeof(alpha)); pos+=sizeof(alpha);
+		obj=BasisA(rc,cutname,cutnorm,size,phiAN);
+		if(size>0){
+			std::memcpy(obj.eta().data(),arr+pos,obj.size()*sizeof(double)); pos+=size*sizeof(double);
+			std::memcpy(obj.zeta().data(),arr+pos,obj.size()*sizeof(double)); pos+=size*sizeof(double);
+			std::memcpy(obj.lambda().data(),arr+pos,obj.size()*sizeof(int)); pos+=size*sizeof(int);
 		}
+		obj.alpha()=alpha;
+		obj.init();
 		return pos;
 	}
 	

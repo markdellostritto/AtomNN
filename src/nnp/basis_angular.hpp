@@ -8,7 +8,7 @@
 #include <Eigen/Dense>
 // symmetry functions
 #include "src/nnp/cutoff.hpp"
-#include "src/nnp/symm_angular.hpp"
+#include "src/nnp/basis.hpp"
 // serialize
 #include "src/mem/serialize.hpp"
 
@@ -16,58 +16,97 @@
 #define BASIS_ANGULAR_PRINT_FUNC 0
 #endif
 
-struct BasisA{
+//*****************************************
+// PhiAN - angular function names
+//*****************************************
+
+class PhiAN{
+public:
+	enum Type{
+		UNKNOWN,
+		GAUSS,//gaussian
+		IPOWP,//inverse power - product
+		IPOWS,//inverse power - sum
+		SECHP,//sech - product
+		SECHS//sech - sum
+	};
+	//constructor
+	PhiAN():t_(Type::UNKNOWN){}
+	PhiAN(Type t):t_(t){}
+	//operators
+	operator Type()const{return t_;}
+	//member functions
+	static PhiAN read(const char* str);
+	static const char* name(const PhiAN& phiAN);
 private:
-	double rc_;//cutoff radius
-	double norm_;//normalization factor
+	Type t_;
+	//prevent automatic conversion for other built-in types
+	//template<typename T> operator T() const;
+};
+std::ostream& operator<<(std::ostream& out, const PhiAN& t);
+
+//*****************************************
+// BasisA - angular basis
+//*****************************************
+
+class BasisA: public Basis{
+private:
 	PhiAN phiAN_;//type of angular functions
-	cutoff::Norm normT_;//normalization scheme
-	int nfA_;//number of angular functions
-	cutoff::Func* cutoff_;//cutoff function
-	PhiA** fA_;//angular functions
-	Eigen::VectorXd symm_;//symmetry function
+	int alpha_;//power
+	std::vector<double> eta_;//radial width
+	std::vector<double> zeta_;//angular width
+	std::vector<double> ietap_;//eta^-p
+	std::vector<int> lambda_;//sign of cosine window
+	std::vector<double> phif_;
+	std::vector<std::vector<double> > etaf_;
 public:
 	//==== constructors/destructors ====
-	BasisA():normT_(cutoff::Norm::UNKNOWN),phiAN_(PhiAN::UNKNOWN),nfA_(0),fA_(NULL),cutoff_(NULL){}
-	BasisA(const BasisA& basisA);
+	BasisA():Basis(),phiAN_(PhiAN::UNKNOWN){}
+	BasisA(double rc, cutoff::Name cutname, cutoff::Norm cutnorm, int nf, PhiAN phiAN);
 	~BasisA();
 	
 	//==== operators ====
-	BasisA& operator=(const BasisA& basisA);
 	friend std::ostream& operator<<(std::ostream& out, const BasisA& basisA);
 	
-	//==== initialization ====
-	void init_G3(int nA, cutoff::Norm norm, cutoff::Name tcut, double rcut);
-	void init_G4(int nA, cutoff::Norm norm, cutoff::Name tcut, double rcut);
-	
 	//==== reading/writing ====
-	static void write(const char* file,const BasisA& basis);
-	static void read(const char* file, BasisA& basis);
-	static void write(FILE* writer,const BasisA& basis);
+	static void write(FILE* writer, const BasisA& basis);
 	static void read(FILE* writer, BasisA& basis);
 	
 	//==== member access ====
-	cutoff::Func* cutoff(){return cutoff_;}
-	const cutoff::Func* cutoff()const{return cutoff_;}
-	double& rc(){return rc_;}
-	const double& rc()const{return rc_;}
-	const int& nfA()const{return nfA_;}
 	PhiAN& phiAN(){return phiAN_;}
 	const PhiAN& phiAN()const{return phiAN_;}
-	cutoff::Norm& normT(){return normT_;}
-	const cutoff::Norm& normT()const{return normT_;}
-	PhiA& fA(int i){return *fA_[i];}
-	const PhiA& fA(int i)const{return *fA_[i];}
+	int& alpha(){return alpha_;}
+	const int& alpha()const{return alpha_;}
+	double& eta(int i){return eta_[i];}
+	const double& eta(int i)const{return eta_[i];}
+	double& zeta(int i){return zeta_[i];}
+	const double& zeta(int i)const{return zeta_[i];}
+	int& lambda(int i){return lambda_[i];}
+	const int& lambda(int i)const{return lambda_[i];}
+	std::vector<double>& eta(){return eta_;}
+	const std::vector<double>& eta()const{return eta_;}
+	std::vector<double>& zeta(){return zeta_;}
+	const std::vector<double>& zeta()const{return zeta_;}
+	std::vector<int>& lambda(){return lambda_;}
+	const std::vector<int>& lambda()const{return lambda_;}
+	std::vector<double>& phif(){return phif_;}
+	const std::vector<double>& phif()const{return phif_;}
+	std::vector<std::vector<double> >& etaf(){return etaf_;}
+	const std::vector<std::vector<double> >& etaf()const{return etaf_;}
+	
 	Eigen::VectorXd& symm(){return symm_;}
 	const Eigen::VectorXd& symm()const{return symm_;}
 	
 	//==== member functions ====
 	void clear();
+	void resize(int size);
+	void init();
+	double symmf(double cos, const double dr[3], double eta, double zeta, int lambda, int alpha)const;
+	void symmd(double& fphi, double* feta, double cos, const double dr[3], double eta, double zeta, int lambda, int alpha)const;
 	void symm(double cos, const double d[3]);
 	void force(double& phi, double* eta, double cos, const double d[3], const double* dEdG)const;
-	
-	//==== static functions ====
-	static double norm(cutoff::Norm normT, double rc);
+	void compute(double cos, const double d[3], double* symm, double* phi, double* eta0, double* eta1, double* eta2)const;
+	void forcep(double cos, const double dr[3]);
 };
 
 bool operator==(const BasisA& basis1, const BasisA& basis2);
